@@ -34,7 +34,11 @@ function EmojiPicker({ className, columns, ...props }: EmojiPickerRootProps) {
                 className="flex size-8 items-center justify-center whitespace-nowrap rounded-md text-lg data-[active]:bg-neutral-100 dark:data-[active]:bg-neutral-800"
                 {...props}
               >
-                {emoji.emoji}
+                {emoji.type === "native" ? (
+                  emoji.emoji
+                ) : (
+                  <img alt="" className="size-[1em]" src={emoji.url} />
+                )}
               </button>
             ),
             Row: ({ children, ...props }) => (

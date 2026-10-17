@@ -83,12 +83,16 @@ function EmojiPickerEmoji({
       )}
       style={
         {
-          "--emoji": `"${emoji.emoji}"`,
+          "--emoji": emoji.type === "native" ? `"${emoji.emoji}"` : undefined,
           ...style,
         } as CSSProperties
       }
     >
-      {emoji.emoji}
+      {emoji.type === "native" ? (
+        emoji.emoji
+      ) : (
+        <img alt="" className="size-[1em] object-contain" src={emoji.url} />
+      )}
     </button>
   );
 }
@@ -168,7 +172,15 @@ function EmojiPicker({
             emoji ? (
               <>
                 <div className="flex size-8 flex-none items-center justify-center text-xl">
-                  {emoji.emoji}
+                  {emoji.type === "native" ? (
+                    emoji.emoji
+                  ) : (
+                    <img
+                      alt=""
+                      className="size-[1em] object-contain"
+                      src={emoji.url}
+                    />
+                  )}
                 </div>
                 <span className="truncate font-medium text-secondary-foreground text-xs">
                   {emoji.label}

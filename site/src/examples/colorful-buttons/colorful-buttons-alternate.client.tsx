@@ -16,7 +16,7 @@ interface RowProps extends ComponentProps<"div"> {
 }
 
 interface EmojiProps extends ComponentProps<"button"> {
-  emoji: EmojiObject;
+  emoji: Extract<EmojiObject, { type: "native" }>;
   index: number;
 }
 
@@ -126,24 +126,61 @@ export function ColorfulButtonsAlternatePreview() {
       <List className="w-fit touch-none select-none" columns={4} rows={3}>
         <Row index={0}>
           <Emoji
-            emoji={{ emoji: "😊", label: "Smiling face with smiling eyes" }}
+            emoji={{
+              type: "native",
+              emoji: "😊",
+              label: "Smiling face with smiling eyes",
+            }}
             index={0}
           />
-          <Emoji emoji={{ emoji: "🎀", label: "Ribbon" }} index={1} />
-          <Emoji emoji={{ emoji: "🥑", label: "Avocado" }} index={2} />
-          <Emoji emoji={{ emoji: "🌈", label: "Rainbow" }} index={3} />
+          <Emoji
+            emoji={{ type: "native", emoji: "🎀", label: "Ribbon" }}
+            index={1}
+          />
+          <Emoji
+            emoji={{ type: "native", emoji: "🥑", label: "Avocado" }}
+            index={2}
+          />
+          <Emoji
+            emoji={{ type: "native", emoji: "🌈", label: "Rainbow" }}
+            index={3}
+          />
         </Row>
         <Row index={1}>
-          <Emoji emoji={{ emoji: "🖤", label: "Black heart" }} index={0} />
-          <Emoji emoji={{ emoji: "❤️", label: "Red heart" }} index={1} />
-          <Emoji emoji={{ emoji: "🧡", label: "Orange heart" }} index={2} />
-          <Emoji emoji={{ emoji: "💛", label: "Yellow heart" }} index={3} />
+          <Emoji
+            emoji={{ type: "native", emoji: "🖤", label: "Black heart" }}
+            index={0}
+          />
+          <Emoji
+            emoji={{ type: "native", emoji: "❤️", label: "Red heart" }}
+            index={1}
+          />
+          <Emoji
+            emoji={{ type: "native", emoji: "🧡", label: "Orange heart" }}
+            index={2}
+          />
+          <Emoji
+            emoji={{ type: "native", emoji: "💛", label: "Yellow heart" }}
+            index={3}
+          />
         </Row>
         <Row index={2}>
-          <Emoji emoji={{ emoji: "🤍", label: "White heart" }} index={0} />
-          <Emoji emoji={{ emoji: "💚", label: "Green heart" }} index={1} />
-          <Emoji emoji={{ emoji: "💙", label: "Blue heart" }} index={2} />
-          <Emoji emoji={{ emoji: "💜", label: "Purple heart" }} index={3} />
+          <Emoji
+            emoji={{ type: "native", emoji: "🤍", label: "White heart" }}
+            index={0}
+          />
+          <Emoji
+            emoji={{ type: "native", emoji: "💚", label: "Green heart" }}
+            index={1}
+          />
+          <Emoji
+            emoji={{ type: "native", emoji: "💙", label: "Blue heart" }}
+            index={2}
+          />
+          <Emoji
+            emoji={{ type: "native", emoji: "💜", label: "Purple heart" }}
+            index={3}
+          />
         </Row>
       </List>
       <span className="pointer-events-none absolute inset-x-4 bottom-6 select-none truncate text-center text-foreground/50 text-sm">

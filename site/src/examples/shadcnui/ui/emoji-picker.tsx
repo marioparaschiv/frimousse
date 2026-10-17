@@ -68,7 +68,11 @@ function EmojiPickerEmoji({
       )}
       data-slot="emoji-picker-emoji"
     >
-      {emoji.emoji}
+      {emoji.type === "native" ? (
+        emoji.emoji
+      ) : (
+        <img alt="" className="size-[1em] object-contain" src={emoji.url} />
+      )}
     </button>
   );
 }
@@ -141,7 +145,15 @@ function EmojiPickerFooter({
           emoji ? (
             <>
               <div className="flex size-7 flex-none items-center justify-center text-lg">
-                {emoji.emoji}
+                {emoji.type === "native" ? (
+                  emoji.emoji
+                ) : (
+                  <img
+                    alt=""
+                    className="size-[1em] object-contain"
+                    src={emoji.url}
+                  />
+                )}
               </div>
               <span className="truncate text-secondary-foreground text-xs">
                 {emoji.label}

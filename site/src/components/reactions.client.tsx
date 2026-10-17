@@ -82,7 +82,7 @@ interface ReactionsProps {
 }
 
 const FirstHiddenReactionIndexContext = createContext<number>(
-  Number.POSITIVE_INFINITY
+  Number.POSITIVE_INFINITY,
 );
 
 const AddReactionContext = createContext<RefObject<(emoji: string) => void>>({
@@ -124,7 +124,7 @@ const ReactionButton = memo(
           "group rounded-full border border-transparent bg-muted px-2.5 py-1 text-sm tabular-nums will-change-transform hover:border-border hover:bg-background focus-visible:border-border focus-visible:bg-background data-[state=open]:border-border data-[state=open]:bg-background",
           active && !isInitialRender
             ? "border-accent/80 bg-accent/10 text-accent outline-accent/20 selection:bg-accent/30 hover:border-accent hover:bg-accent/20 focus-visible:border-accent dark:bg-accent/20 dark:focus-visible:bg-accent/20 dark:hover:bg-accent/30 dark:selection:bg-accent/40"
-            : "text-secondary-foreground focus-visible:border-muted-foreground/80"
+            : "text-secondary-foreground focus-visible:border-muted-foreground/80",
         )}
         data-count={count}
         data-reaction={emoji}
@@ -155,7 +155,7 @@ const ReactionButton = memo(
         </span>
       </button>
     );
-  }
+  },
 );
 
 function ReactionPlaceholder({
@@ -168,7 +168,7 @@ function ReactionPlaceholder({
       className={cn(
         buttonVariants({ variant: "none" }),
         "group rounded-full border border-border border-dotted bg-background px-2.5 py-1 text-muted-foreground text-sm tabular-nums",
-        className
+        className,
       )}
       {...props}
     >
@@ -214,7 +214,7 @@ function AddReactionButton({
     (emoji: string) => {
       onEmojiSelect?.(getBaseEmoji(emoji));
     },
-    [onEmojiSelect]
+    [onEmojiSelect],
   );
 
   const trigger = (
@@ -222,7 +222,7 @@ function AddReactionButton({
       aria-label="Try it"
       className={cn(
         buttonVariants({ variant: "default" }),
-        "group rounded-full"
+        "group rounded-full",
       )}
       title="Try it"
       {...props}
@@ -234,8 +234,11 @@ function AddReactionButton({
   const emojiPicker = (
     <EmojiPicker
       autoFocus
-      onEmojiSelect={({ emoji }) => {
-        handleEmojiSelect?.(emoji);
+      onEmojiSelect={(emoji) => {
+        if (emoji.type === "native") {
+          handleEmojiSelect?.(emoji.emoji);
+        }
+
         setIsOpen(false);
       }}
     />
@@ -273,7 +276,7 @@ function LiveblocksReactions() {
   const reactions = useStorage((storage) => storage.reactions);
   const sortedReactions = useMemo(
     () => getVisibleReactions(reactions),
-    [reactions]
+    [reactions],
   );
 
   const toggleReaction = useMutation(
@@ -294,7 +297,7 @@ function LiveblocksReactions() {
             [CREATED_AT_KEY, now],
             [UPDATED_AT_KEY, now],
             [id, 1],
-          ])
+          ]),
         );
       } else if (reaction.has(id)) {
         // If the reaction exists and is active, remove self
@@ -325,13 +328,13 @@ function LiveblocksReactions() {
       if (sortedReactions && sortedReactions.length > MAX_REACTIONS) {
         for (const [emoji] of sortedReactions.slice(
           MAX_REACTIONS,
-          sortedReactions.length
+          sortedReactions.length,
         )) {
           reactions?.delete(emoji);
         }
       }
     },
-    [sortedReactions, id]
+    [sortedReactions, id],
   );
 
   useLayoutEffect(() => {
@@ -377,7 +380,7 @@ function LocalReactions({
   const [reactions, setReactions] = useState(() => ({ ...initialReactions }));
   const sortedReactions = useMemo(
     () => getVisibleReactionsEntries(reactions),
-    [reactions]
+    [reactions],
   );
   const firstHiddenReactionIndex = use(FirstHiddenReactionIndexContext);
   const toggleReaction = useCallback((emoji: string) => {
@@ -402,7 +405,7 @@ function LocalReactions({
 
           for (const [emoji] of sortedReactions.slice(
             MAX_REACTIONS,
-            sortedReactions.length
+            sortedReactions.length,
           )) {
             delete updatedReactions[emoji];
           }
@@ -478,7 +481,7 @@ const initialStorage: Liveblocks["Storage"] = {
     Object.entries(DEFAULT_REACTIONS).map(([emoji, data]) => [
       emoji,
       new LiveMap(Object.entries(data)),
-    ])
+    ]),
   ),
 };
 
@@ -553,15 +556,15 @@ export function ReactionsList({
       clearTimeout(debounceTimeout);
       debounceTimeout = setTimeout(
         updateLastVisibleReaction,
-        REACTIONS_HIDING_DEBOUNCE_DELAY
+        REACTIONS_HIDING_DEBOUNCE_DELAY,
       );
     };
 
     const resizeObserver = new ResizeObserver(
-      debouncedUpdateLastVisibleReaction
+      debouncedUpdateLastVisibleReaction,
     );
     const mutationObserver = new MutationObserver(
-      debouncedUpdateLastVisibleReaction
+      debouncedUpdateLastVisibleReaction,
     );
 
     resizeObserver.observe(ref.current);
@@ -584,7 +587,7 @@ export function ReactionsList({
       className={cn(
         "2xs:[--rows:4] [--button-height:calc(var(--spacing)*8)] [--gap:calc(var(--spacing)*1.5)] [--rows:5] xs:[--rows:3]",
         "flex max-h-[calc(var(--button-height)_*_var(--rows)_+_var(--gap)_*_(var(--rows)_-_1))] min-h-(--button-height) flex-wrap gap-(--gap) [clip-path:inset(-3px)]",
-        className
+        className,
       )}
       ref={ref}
       {...props}
