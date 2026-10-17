@@ -11,6 +11,8 @@ import { createStore, createStoreContext } from "./utils/store";
 
 const VIEWPORT_OVERSCAN = 2;
 
+const EMOJI_KEY_IGNORED_CHARACTERS = /[\uFE0E\uFE0F\u{1F3FB}-\u{1F3FF}]/gu;
+
 type Interaction = "keyboard" | "pointer" | "none";
 
 export type EmojiPickerStore = {
@@ -18,6 +20,7 @@ export type EmojiPickerStore = {
   columns: number;
   sticky: boolean;
   skinTone: SkinTone;
+  categories: EmojiPickerRootProps["categories"];
   onEmojiSelect: NonNullable<EmojiPickerRootProps["onEmojiSelect"]>;
   onEmojiContextMenu: NonNullable<EmojiPickerRootProps["onEmojiContextMenu"]>;
 
@@ -43,7 +46,7 @@ export type EmojiPickerStore = {
 
   updateViewportState: (changes?: Partial<EmojiPickerStore>) => void;
 
-  onDataChange: (data: EmojiPickerData) => void;
+  onDataChange: (data: EmojiPickerData, search: string) => void;
   onSearchChange: (search: string) => void;
   onActiveEmojiChange: (
     interaction: Exclude<Interaction, "none">,
@@ -64,14 +67,17 @@ export function createEmojiPickerStore(
   initialColumns: number,
   initialSticky: boolean,
   initialSkinTone: SkinTone,
+  initialCategories: EmojiPickerRootProps["categories"],
 ) {
   let viewportScrollY = 0;
+  let dataSearch: string | undefined;
 
   return createStore<EmojiPickerStore>((set, get) => ({
     locale: initialLocale,
     columns: initialColumns,
     sticky: initialSticky,
     skinTone: initialSkinTone,
+    categories: initialCategories,
     onEmojiSelect,
     onEmojiContextMenu,
 
@@ -173,13 +179,29 @@ export function createEmojiPickerStore(
       });
     },
 
-    onDataChange: (data: EmojiPickerData) => {
-      get().updateViewportState({
-        data,
+    onDataChange: (data: EmojiPickerData, search: string) => {
+      const state = get();
+      const hasSearchChanged = search !== dataSearch;
 
-        // Reset active emoji when data changes
-        activeColumnIndex: 0,
-        activeRowIndex: 0,
+      dataSearch = search;
+
+      // Reset active emoji when search changes
+      if (hasSearchChanged) {
+        return state.updateViewportState({
+          data,
+          activeColumnIndex: 0,
+          activeRowIndex: 0,
+        });
+      }
+
+      // Pointer interactions update the active emoji on their own
+      if (state.interaction !== "keyboard") {
+        return state.updateViewportState({ data });
+      }
+
+      return state.updateViewportState({
+        data,
+        ...findKeyboardActiveEmoji(state, data),
       });
     },
     onSearchChange: (search: string) => {
@@ -321,6 +343,57 @@ export function $activeEmoji(
   return activeEmoji;
 }
 
+export function $activeEmojiKey(state: EmojiPickerStore) {
+  const activeEmoji = $activeEmoji(state);
+  const activeRow = state.data?.rows[state.activeRowIndex];
+
+  if (!activeEmoji || !activeRow) {
+    return undefined;
+  }
+
+  return getEmojiPickerEmojiKey(activeRow.categoryId, activeEmoji);
+}
+
+// Keys are shared across skin tones and variation selectors
+export function getEmojiPickerEmojiKey(
+  categoryId: string,
+  emoji: EmojiPickerEmoji,
+) {
+  return `${categoryId}:${emoji.emoji.replace(EMOJI_KEY_IGNORED_CHARACTERS, "")}`;
+}
+
+function findKeyboardActiveEmoji(
+  state: EmojiPickerStore,
+  data: EmojiPickerData,
+): Pick<EmojiPickerStore, "activeColumnIndex" | "activeRowIndex"> {
+  const activeEmojiKey = $activeEmojiKey(state);
+
+  for (const [rowIndex, row] of data.rows.entries()) {
+    const columnIndex = row.emojis.findIndex(
+      (emoji) =>
+        getEmojiPickerEmojiKey(row.categoryId, emoji) === activeEmojiKey,
+    );
+
+    if (columnIndex >= 0) {
+      return { activeColumnIndex: columnIndex, activeRowIndex: rowIndex };
+    }
+  }
+
+  const activeRowIndex = Math.max(
+    0,
+    Math.min(state.activeRowIndex, data.rows.length - 1),
+  );
+  const activeColumnIndex = Math.max(
+    0,
+    Math.min(
+      state.activeColumnIndex,
+      (data.rows[activeRowIndex]?.emojis.length ?? 0) - 1,
+    ),
+  );
+
+  return { activeColumnIndex, activeRowIndex };
+}
+
 export function $isEmpty(state: EmojiPickerStore) {
   return (
     state.data === undefined ||
@@ -335,6 +408,10 @@ export function $isLoading(state: EmojiPickerStore) {
     state.rowHeight === null ||
     state.categoryHeaderHeight === null
   );
+}
+
+export function $rows(state: EmojiPickerStore) {
+  return state.data?.rows;
 }
 
 export function $rowsCount(state: EmojiPickerStore) {
@@ -357,14 +434,14 @@ export function sameEmojiPickerEmoji(
   a: EmojiPickerEmoji | undefined,
   b: EmojiPickerEmoji | undefined,
 ) {
-  return a?.emoji === b?.emoji;
+  return a?.emoji === b?.emoji && a?.label === b?.label;
 }
 
 export function sameEmojiPickerRow(
   a: EmojiPickerDataRow | undefined,
   b: EmojiPickerDataRow | undefined,
 ) {
-  if (a?.categoryIndex !== b?.categoryIndex) {
+  if (a?.key !== b?.key || a?.categoryIndex !== b?.categoryIndex) {
     return false;
   }
 

@@ -1,10 +1,17 @@
 /* biome-ignore-all lint/a11y/useAriaPropsSupportedByRole: ARIA attributes are used for testing purposes */
 
 import { page, userEvent } from "@vitest/browser/context";
-import { Children, type ReactNode, useState } from "react";
+import {
+  Children,
+  Profiler,
+  type ProfilerOnRenderCallback,
+  type ReactNode,
+  useState,
+} from "react";
 import { describe, expect, it, vi } from "vitest";
 import { defaultEmojiDataResolver } from "../../data/emoji";
 import type {
+  CustomCategory,
   Emoji,
   EmojiData,
   EmojiDataResolver,
@@ -34,6 +41,7 @@ function DefaultPage({
   sticky = true,
   resolveEmojiData,
   onEmojiContextMenu,
+  categories,
 }: {
   children?: ReactNode;
   locale?: EmojiPickerRootProps["locale"];
@@ -50,6 +58,7 @@ function DefaultPage({
   emptyChildren?: EmojiPickerEmptyProps["children"];
   sticky?: EmojiPickerRootProps["sticky"];
   onEmojiContextMenu?: EmojiPickerRootProps["onEmojiContextMenu"];
+  categories?: EmojiPickerRootProps["categories"];
 }) {
   const [selectedEmoji, setSelectedEmoji] = useState<Emoji | null>(null);
 
@@ -61,6 +70,7 @@ function DefaultPage({
       </div>
       <div>
         <EmojiPicker.Root
+          categories={categories}
           columns={columns}
           data-testid="root"
           emojiVersion={emojiVersion}
@@ -1127,4 +1137,149 @@ describe("EmojiPicker with a custom emoji data resolver", () => {
       await expect.poll(() => errorSpy.mock.calls).toEqual([[error]]);
     },
   );
+});
+
+describe("EmojiPicker with custom categories", () => {
+  const PINNED: CustomCategory = {
+    id: "pinned",
+    label: "Pinned",
+    emojis: ["😀", "😃"],
+  };
+
+  function nextFrame() {
+    return new Promise((resolve) => requestAnimationFrame(resolve));
+  }
+
+  it("should render custom categories among the built-in ones", async () => {
+    page.render(
+      <DefaultPage
+        categories={[
+          PINNED,
+          { id: "food", label: "Pinned food", index: -1, emojis: ["🥦"] },
+        ]}
+      />,
+    );
+
+    await expect
+      .element(page.getByText("Pinned", { exact: true }))
+      .toBeInTheDocument();
+
+    const firstRow = page.getByRole("row").first().getByRole("gridcell");
+
+    await expect.element(firstRow.nth(0)).toHaveTextContent("😀");
+    await expect.element(firstRow.nth(1)).toHaveTextContent("😃");
+    await expect.element(firstRow.nth(2)).not.toBeInTheDocument();
+
+    await page.getByTestId("search").fill("broccoli");
+
+    await expect
+      .element(page.getByText("Pinned food", { exact: true }))
+      .toBeInTheDocument();
+    await expect
+      .element(page.getByText("Pinned", { exact: true }))
+      .not.toBeInTheDocument();
+    expect(page.getByText("🥦").elements()).toHaveLength(2);
+  });
+
+  it("should only render the changed rows and emojis when categories change", async () => {
+    const renders: string[] = [];
+    const onRender: ProfilerOnRenderCallback = (id, phase) => {
+      renders.push(`${phase} ${id}`);
+    };
+    const listComponents: EmojiPickerListProps["components"] = {
+      Row: ({ children, ...props }) => (
+        <Profiler id={`row ${props["aria-rowindex"]}`} onRender={onRender}>
+          <div {...props}>{children}</div>
+        </Profiler>
+      ),
+      Emoji: ({ emoji, style, ...props }) => (
+        <Profiler id={`emoji ${emoji.label}`} onRender={onRender}>
+          <button style={{ height: EMOJI_BUTTON_HEIGHT, ...style }} {...props}>
+            {emoji.emoji}
+          </button>
+        </Profiler>
+      ),
+    };
+    const resolveEmojiData = vi.fn<EmojiDataResolver>(defaultEmojiDataResolver);
+
+    const screen = page.render(
+      <DefaultPage
+        categories={[PINNED]}
+        listComponents={listComponents}
+        resolveEmojiData={resolveEmojiData}
+      />,
+    );
+
+    await expect
+      .element(page.getByRole("row").nth(10))
+      .toHaveAttribute("aria-rowindex", "10");
+    await nextFrame();
+    await nextFrame();
+
+    renders.length = 0;
+
+    screen.rerender(
+      <DefaultPage
+        categories={[{ ...PINNED, emojis: [...PINNED.emojis, "😄"] }]}
+        listComponents={listComponents}
+        resolveEmojiData={resolveEmojiData}
+      />,
+    );
+
+    await expect
+      .element(page.getByRole("row").first().getByRole("gridcell").nth(2))
+      .toHaveTextContent("😄");
+    await nextFrame();
+    await nextFrame();
+
+    expect(renders.sort()).toEqual([
+      "mount emoji Grinning face with smiling eyes",
+      "update row 0",
+    ]);
+    expect(resolveEmojiData).toHaveBeenCalledTimes(1);
+  });
+
+  it("should keep the keyboard active emoji when categories change", async () => {
+    const screen = page.render(<DefaultPage />);
+
+    await page.getByTestId("search").click();
+    await userEvent.keyboard("{ArrowDown}{ArrowRight}");
+
+    await expect
+      .element(
+        page.getByRole("gridcell", { name: "Grinning face with big eyes" }),
+      )
+      .toHaveAttribute("data-active");
+
+    screen.rerender(<DefaultPage categories={[PINNED]} />);
+
+    await expect
+      .element(page.getByText("Pinned", { exact: true }))
+      .toBeInTheDocument();
+    await expect
+      .element(page.getByText("😃").nth(1))
+      .toHaveAttribute("data-active");
+    await expect
+      .element(page.getByText("😃").first())
+      .not.toHaveAttribute("data-active");
+
+    await userEvent.keyboard("{Enter}");
+
+    await expect
+      .element(page.getByTestId("selected-emoji"))
+      .toHaveTextContent("😃");
+  });
+
+  it("should not highlight the same emoji in other categories", async () => {
+    page.render(<DefaultPage categories={[PINNED]} />);
+
+    await page.getByText("😀").first().hover();
+
+    await expect
+      .element(page.getByText("😀").first())
+      .toHaveAttribute("data-active");
+    await expect
+      .element(page.getByText("😀").nth(1))
+      .not.toHaveAttribute("data-active");
+  });
 });

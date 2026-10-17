@@ -12,6 +12,7 @@ export {
 } from "./hooks/use-emoji-details";
 export type {
   Category,
+  CustomCategory,
   Emoji,
   EmojiData,
   EmojiDataResolver,

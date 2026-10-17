@@ -566,6 +566,33 @@ export function Docs({
             section.
           </p>
         </PropertiesListRow>
+        <PropertiesListRow name="categories" type="CustomCategory[]">
+          <p>
+            Custom categories of emojis from the loaded data, inserted among the
+            built-in ones (e.g. favorites or recently used emojis). Each one is
+            defined as{" "}
+            <code>
+              {"{"} id, label, index?, emojis {"}"}
+            </code>
+            .
+          </p>
+          <p>
+            <code>index</code> is a <code>splice</code> index among the built-in
+            categories (<code>0</code> by default, negative values count from
+            the end, out of range values are clamped). <code>emojis</code>{" "}
+            accepts emoji strings or{" "}
+            <code>
+              {"{"} emoji, label {"}"}
+            </code>{" "}
+            objects to override their label within the category.
+          </p>
+          <p>
+            Emojis are matched regardless of variation selectors and skin tones,
+            and displayed with the current skin tone. Unknown emojis are
+            skipped, and custom categories are searched like built-in ones and
+            hidden when empty. Changing them doesn’t reload the data.
+          </p>
+        </PropertiesListRow>
         <PropertiesListBasicRow>
           <p>
             All built-in <code>div</code> props.

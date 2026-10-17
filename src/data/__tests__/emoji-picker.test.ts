@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { EmojiData } from "../../types";
-import { getEmojiPickerData, searchEmojis } from "../emoji-picker";
+import type { CustomCategory, EmojiData, SkinTone } from "../../types";
+import {
+  getCustomEmojiPickerSections,
+  getEmojiPickerData,
+  getEmojiPickerSections,
+  searchEmojis,
+} from "../emoji-picker";
 
 const data: EmojiData = {
   locale: "en",
@@ -241,9 +246,32 @@ describe("searchEmojis", () => {
   });
 });
 
+function getData(
+  columns: number,
+  skinTone: SkinTone | undefined,
+  search: string,
+  categories: CustomCategory[] = [],
+) {
+  return getEmojiPickerData(
+    getEmojiPickerSections(data, columns, skinTone, search),
+    getCustomEmojiPickerSections(data, categories, columns, skinTone, search),
+    data.skinTones,
+  );
+}
+
+function getCategoryLabels(result: ReturnType<typeof getData>) {
+  return result.categories.map((category) => category.label);
+}
+
+function getCategoryEmojis(result: ReturnType<typeof getData>, id: string) {
+  return result.rows
+    .filter((row) => row.categoryId === id)
+    .flatMap((row) => row.emojis);
+}
+
 describe("getEmojiPickerData", () => {
   it("should organize emojis into categories and rows", () => {
-    const result = getEmojiPickerData(data, 10, undefined, "");
+    const result = getData(10, undefined, "");
 
     expect(result.count).toBe(data.emojis.length);
     expect(result.categories.length).toBe(9);
@@ -264,7 +292,7 @@ describe("getEmojiPickerData", () => {
   });
 
   it("should filter emojis based on search", () => {
-    const result = getEmojiPickerData(data, 10, undefined, "broccoli");
+    const result = getData(10, undefined, "broccoli");
 
     expect(result.count).toBe(1);
     expect(result.categories.length).toBe(1);
@@ -274,7 +302,7 @@ describe("getEmojiPickerData", () => {
   });
 
   it("should apply skin tones when possible", () => {
-    const result = getEmojiPickerData(data, 10, "dark", "");
+    const result = getData(10, "dark", "");
     const emojis = result.rows.flatMap((row) => row.emojis);
 
     const emoji1 = emojis.find((emoji) => emoji.label === "Waving hand");
@@ -290,11 +318,198 @@ describe("getEmojiPickerData", () => {
   });
 
   it("should support empty search results", () => {
-    const result = getEmojiPickerData(data, 10, undefined, "..........");
+    const result = getData(10, undefined, "..........");
 
     expect(result.count).toBe(0);
     expect(result.categories).toEqual([]);
     expect(result.rows).toEqual([]);
     expect(result.categoriesStartRowIndices).toEqual([]);
+  });
+});
+
+describe("getEmojiPickerData with custom categories", () => {
+  it("should insert custom categories before the built-in ones by default", () => {
+    const result = getData(2, undefined, "", [
+      { id: "favorites", label: "Favorites", emojis: ["🥦", "🔗", "🎉"] },
+    ]);
+
+    expect(getCategoryLabels(result)).toEqual([
+      "Favorites",
+      "Smileys & emotion",
+      "People & body",
+      "Animals & nature",
+      "Food & drink",
+      "Travel & places",
+      "Activities",
+      "Objects",
+      "Symbols",
+      "Flags",
+    ]);
+    expect(result.categories[0]).toEqual({
+      id: "favorites",
+      label: "Favorites",
+      rowsCount: 2,
+      startRowIndex: 0,
+    });
+    expect(result.categories[1]?.startRowIndex).toBe(2);
+    expect(result.rows.slice(0, 3)).toEqual([
+      {
+        key: "favorites:0",
+        categoryId: "favorites",
+        categoryIndex: 0,
+        emojis: [
+          { emoji: "🥦", label: "Broccoli" },
+          { emoji: "🔗", label: "Link" },
+        ],
+      },
+      {
+        key: "favorites:1",
+        categoryId: "favorites",
+        categoryIndex: 0,
+        emojis: [{ emoji: "🎉", label: "Party popper" }],
+      },
+      {
+        key: "built-in:0:0",
+        categoryId: "built-in:0",
+        categoryIndex: 1,
+        emojis: [{ emoji: "🙂", label: "Slightly smiling face" }],
+      },
+    ]);
+    expect(result.count).toBe(data.emojis.length + 3);
+  });
+
+  it("should insert custom categories at a splice index", () => {
+    const getLabels = (index: number) =>
+      getCategoryLabels(
+        getData(10, undefined, "", [
+          { id: "custom", label: "Custom", index, emojis: ["🥦"] },
+        ]),
+      );
+
+    expect(getLabels(2).slice(0, 4)).toEqual([
+      "Smileys & emotion",
+      "People & body",
+      "Custom",
+      "Animals & nature",
+    ]);
+    expect(getLabels(-1).slice(-3)).toEqual(["Symbols", "Custom", "Flags"]);
+    expect(getLabels(100).at(-1)).toBe("Custom");
+    expect(getLabels(-100)[0]).toBe("Custom");
+  });
+
+  it("should keep the order of custom categories with the same index", () => {
+    const result = getData(10, undefined, "", [
+      { id: "a", label: "A", index: 1, emojis: ["🥦"] },
+      { id: "b", label: "B", emojis: ["🥦"] },
+      { id: "c", label: "C", index: 1, emojis: ["🥦"] },
+      { id: "d", label: "D", index: -8, emojis: ["🥦"] },
+    ]);
+
+    expect(getCategoryLabels(result).slice(0, 6)).toEqual([
+      "B",
+      "Smileys & emotion",
+      "A",
+      "C",
+      "D",
+      "People & body",
+    ]);
+  });
+
+  it("should apply indices before hiding empty categories", () => {
+    const result = getData(10, undefined, "face", [
+      { id: "custom", label: "Custom", index: 2, emojis: ["🌚"] },
+    ]);
+
+    expect(getCategoryLabels(result)).toEqual([
+      "Smileys & emotion",
+      "Custom",
+      "Travel & places",
+    ]);
+  });
+
+  it("should match emojis regardless of variation selectors and skin tones", () => {
+    const categories = [
+      {
+        id: "custom",
+        label: "Custom",
+        emojis: ["🙂\uFE0F", "👋🏽", "🧑🏻‍🤝‍🧑🏻"],
+      },
+    ];
+
+    expect(
+      getCategoryEmojis(getData(10, undefined, "", categories), "custom"),
+    ).toEqual([
+      { emoji: "🙂", label: "Slightly smiling face" },
+      { emoji: "👋", label: "Waving hand" },
+      { emoji: "🧑‍🤝‍🧑", label: "People holding hands" },
+    ]);
+    expect(
+      getCategoryEmojis(getData(10, "dark", "", categories), "custom"),
+    ).toEqual([
+      { emoji: "🙂", label: "Slightly smiling face" },
+      { emoji: "👋🏿", label: "Waving hand" },
+      { emoji: "🧑🏿‍🤝‍🧑🏿", label: "People holding hands" },
+    ]);
+  });
+
+  it("should apply label overrides only within their category", () => {
+    const result = getData(10, undefined, "", [
+      {
+        id: "custom",
+        label: "Custom",
+        emojis: [{ emoji: "🥦", label: "Tiny tree" }],
+      },
+    ]);
+
+    expect(getCategoryEmojis(result, "custom")).toEqual([
+      { emoji: "🥦", label: "Tiny tree" },
+    ]);
+    expect(getCategoryEmojis(result, "built-in:4")).toEqual([
+      { emoji: "🥦", label: "Broccoli" },
+    ]);
+  });
+
+  it("should skip unmatched and repeated emojis and hide empty categories", () => {
+    const result = getData(10, undefined, "", [
+      { id: "unknown", label: "Unknown", emojis: ["🫠", "not an emoji"] },
+      { id: "empty", label: "Empty", emojis: [] },
+      { id: "repeated", label: "Repeated", emojis: ["👋", "🥦", "👋🏻"] },
+      { id: "other", label: "Other", emojis: ["👋"] },
+    ]);
+
+    expect(getCategoryLabels(result).slice(0, 3)).toEqual([
+      "Repeated",
+      "Other",
+      "Smileys & emotion",
+    ]);
+    expect(getCategoryEmojis(result, "repeated")).toEqual([
+      { emoji: "👋", label: "Waving hand" },
+      { emoji: "🥦", label: "Broccoli" },
+    ]);
+    expect(result.count).toBe(data.emojis.length + 3);
+  });
+
+  it("should search custom categories by their label overrides and tags", () => {
+    const categories = [
+      {
+        id: "custom",
+        label: "Custom",
+        emojis: ["🔗", { emoji: "🥦", label: "Tiny tree" }],
+      },
+    ];
+
+    const byLabel = getData(10, undefined, "tree", categories);
+
+    expect(getCategoryLabels(byLabel)).toEqual(["Custom"]);
+    expect(getCategoryEmojis(byLabel, "custom")).toEqual([
+      { emoji: "🥦", label: "Tiny tree" },
+    ]);
+
+    const byTag = getData(10, undefined, "cabbage", categories);
+
+    expect(getCategoryLabels(byTag)).toEqual(["Custom", "Food & drink"]);
+    expect(byTag.count).toBe(2);
+
+    expect(getData(10, undefined, "broccoli", categories).count).toBe(1);
   });
 });

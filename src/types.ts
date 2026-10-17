@@ -43,6 +43,8 @@ export type EmojiDetails = Resolve<EmojiDataEmoji>;
 
 export type Category = Resolve<EmojiPickerCategory>;
 
+export type CustomCategory = Resolve<EmojiPickerCustomCategory>;
+
 export type EmojiDataEmoji = {
   emoji: string;
   category: number;
@@ -119,12 +121,51 @@ export type EmojiPickerCategory = {
   label: string;
 };
 
+export type EmojiPickerCustomCategory = {
+  /**
+   * A unique identifier for the category.
+   */
+  id: string;
+
+  /**
+   * The label of the category, displayed in its header.
+   */
+  label: string;
+
+  /**
+   * Where to insert the category among the built-in categories, as a
+   * `splice` index (negative values count from the end, out of range values
+   * are clamped). Custom categories with the same index keep their order.
+   *
+   * @default 0
+   */
+  index?: number;
+
+  /**
+   * The emojis of the category, optionally with a label used only within it.
+   *
+   * Emojis are matched against the loaded data regardless of variation
+   * selectors and skin tones, and displayed with the current skin tone.
+   * Unknown emojis and repeated emojis within the category are skipped.
+   */
+  emojis: (string | { emoji: string; label: string })[];
+};
+
 export type EmojiPickerDataRow = {
+  key: string;
+  categoryId: string;
   categoryIndex: number;
   emojis: EmojiPickerEmoji[];
 };
 
+export type EmojiPickerDataSection = {
+  id: string;
+  label: string;
+  rows: Omit<EmojiPickerDataRow, "categoryIndex">[];
+};
+
 export type EmojiPickerDataCategory = {
+  id: string;
   label: string;
   rowsCount: number;
   startRowIndex: number;
@@ -228,6 +269,15 @@ export interface EmojiPickerRootProps extends ComponentProps<"div"> {
    * @default defaultEmojiDataResolver
    */
   resolveEmojiData?: EmojiDataResolver;
+
+  /**
+   * Custom categories of emojis from the loaded data, inserted among the
+   * built-in ones (e.g. favorites or recently used emojis).
+   *
+   * They are searched like built-in categories and hidden when empty.
+   * Changing them doesn't reload data.
+   */
+  categories?: CustomCategory[];
 
   /**
    * The skin tone of the emoji picker.
