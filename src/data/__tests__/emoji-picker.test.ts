@@ -246,6 +246,9 @@ describe("searchEmojis", () => {
   });
 });
 
+const PARROT_URL = "https://example.com/parrot.png";
+const BLOB_URL = "https://example.com/blob.png";
+
 function getData(
   columns: number,
   skinTone: SkinTone | undefined,
@@ -298,7 +301,11 @@ describe("getEmojiPickerData", () => {
     expect(result.categories.length).toBe(1);
     expect(result.categories[0]?.label).toBe("Food & drink");
     expect(result.rows.length).toBe(1);
-    expect(result.rows[0]?.emojis[0]?.emoji).toBe("🥦");
+    expect(result.rows[0]?.emojis[0]).toEqual({
+      type: "native",
+      emoji: "🥦",
+      label: "Broccoli",
+    });
   });
 
   it("should apply skin tones when possible", () => {
@@ -306,15 +313,15 @@ describe("getEmojiPickerData", () => {
     const emojis = result.rows.flatMap((row) => row.emojis);
 
     const emoji1 = emojis.find((emoji) => emoji.label === "Waving hand");
-    expect(emoji1?.emoji).toBe("👋🏿");
+    expect(emoji1).toMatchObject({ type: "native", emoji: "👋🏿" });
 
     const emoji2 = emojis.find(
       (emoji) => emoji.label === "People holding hands",
     );
-    expect(emoji2?.emoji).toBe("🧑🏿‍🤝‍🧑🏿");
+    expect(emoji2).toMatchObject({ type: "native", emoji: "🧑🏿‍🤝‍🧑🏿" });
 
     const emoji3 = emojis.find((emoji) => emoji.label === "Link");
-    expect(emoji3?.emoji).toBe("🔗");
+    expect(emoji3).toMatchObject({ type: "native", emoji: "🔗" });
   });
 
   it("should support empty search results", () => {
@@ -358,21 +365,23 @@ describe("getEmojiPickerData with custom categories", () => {
         categoryId: "favorites",
         categoryIndex: 0,
         emojis: [
-          { emoji: "🥦", label: "Broccoli" },
-          { emoji: "🔗", label: "Link" },
+          { type: "native", emoji: "🥦", label: "Broccoli" },
+          { type: "native", emoji: "🔗", label: "Link" },
         ],
       },
       {
         key: "favorites:1",
         categoryId: "favorites",
         categoryIndex: 0,
-        emojis: [{ emoji: "🎉", label: "Party popper" }],
+        emojis: [{ type: "native", emoji: "🎉", label: "Party popper" }],
       },
       {
         key: "built-in:0:0",
         categoryId: "built-in:0",
         categoryIndex: 1,
-        emojis: [{ emoji: "🙂", label: "Slightly smiling face" }],
+        emojis: [
+          { type: "native", emoji: "🙂", label: "Slightly smiling face" },
+        ],
       },
     ]);
     expect(result.count).toBe(data.emojis.length + 3);
@@ -439,16 +448,16 @@ describe("getEmojiPickerData with custom categories", () => {
     expect(
       getCategoryEmojis(getData(10, undefined, "", categories), "custom"),
     ).toEqual([
-      { emoji: "🙂", label: "Slightly smiling face" },
-      { emoji: "👋", label: "Waving hand" },
-      { emoji: "🧑‍🤝‍🧑", label: "People holding hands" },
+      { type: "native", emoji: "🙂", label: "Slightly smiling face" },
+      { type: "native", emoji: "👋", label: "Waving hand" },
+      { type: "native", emoji: "🧑‍🤝‍🧑", label: "People holding hands" },
     ]);
     expect(
       getCategoryEmojis(getData(10, "dark", "", categories), "custom"),
     ).toEqual([
-      { emoji: "🙂", label: "Slightly smiling face" },
-      { emoji: "👋🏿", label: "Waving hand" },
-      { emoji: "🧑🏿‍🤝‍🧑🏿", label: "People holding hands" },
+      { type: "native", emoji: "🙂", label: "Slightly smiling face" },
+      { type: "native", emoji: "👋🏿", label: "Waving hand" },
+      { type: "native", emoji: "🧑🏿‍🤝‍🧑🏿", label: "People holding hands" },
     ]);
   });
 
@@ -462,10 +471,10 @@ describe("getEmojiPickerData with custom categories", () => {
     ]);
 
     expect(getCategoryEmojis(result, "custom")).toEqual([
-      { emoji: "🥦", label: "Tiny tree" },
+      { type: "native", emoji: "🥦", label: "Tiny tree" },
     ]);
     expect(getCategoryEmojis(result, "built-in:4")).toEqual([
-      { emoji: "🥦", label: "Broccoli" },
+      { type: "native", emoji: "🥦", label: "Broccoli" },
     ]);
   });
 
@@ -483,8 +492,8 @@ describe("getEmojiPickerData with custom categories", () => {
       "Smileys & emotion",
     ]);
     expect(getCategoryEmojis(result, "repeated")).toEqual([
-      { emoji: "👋", label: "Waving hand" },
-      { emoji: "🥦", label: "Broccoli" },
+      { type: "native", emoji: "👋", label: "Waving hand" },
+      { type: "native", emoji: "🥦", label: "Broccoli" },
     ]);
     expect(result.count).toBe(data.emojis.length + 3);
   });
@@ -502,7 +511,7 @@ describe("getEmojiPickerData with custom categories", () => {
 
     expect(getCategoryLabels(byLabel)).toEqual(["Custom"]);
     expect(getCategoryEmojis(byLabel, "custom")).toEqual([
-      { emoji: "🥦", label: "Tiny tree" },
+      { type: "native", emoji: "🥦", label: "Tiny tree" },
     ]);
 
     const byTag = getData(10, undefined, "cabbage", categories);
@@ -511,5 +520,52 @@ describe("getEmojiPickerData with custom categories", () => {
     expect(byTag.count).toBe(2);
 
     expect(getData(10, undefined, "broccoli", categories).count).toBe(1);
+  });
+
+  it("should include custom emojis among native ones without skin tones", () => {
+    const result = getData(10, "dark", "", [
+      {
+        id: "custom",
+        label: "Custom",
+        emojis: [
+          { id: "parrot", label: "Party parrot", url: PARROT_URL },
+          "👋",
+          { id: "parrot", label: "Repeated parrot", url: PARROT_URL },
+          { id: "blob", label: "Blob wave", url: BLOB_URL, tags: ["hello"] },
+        ],
+      },
+    ]);
+
+    expect(getCategoryEmojis(result, "custom")).toEqual([
+      { type: "custom", id: "parrot", label: "Party parrot", url: PARROT_URL },
+      { type: "native", emoji: "👋🏿", label: "Waving hand" },
+      { type: "custom", id: "blob", label: "Blob wave", url: BLOB_URL },
+    ]);
+  });
+
+  it("should search custom emojis by label and tags", () => {
+    const categories = [
+      {
+        id: "custom",
+        label: "Custom",
+        emojis: [
+          { id: "parrot", label: "Party parrot", url: PARROT_URL },
+          { id: "blob", label: "Blob wave", url: BLOB_URL, tags: ["hello"] },
+        ],
+      },
+    ];
+
+    expect(
+      getCategoryEmojis(getData(10, undefined, "parrot", categories), "custom"),
+    ).toEqual([
+      { type: "custom", id: "parrot", label: "Party parrot", url: PARROT_URL },
+    ]);
+
+    const byTag = getData(10, undefined, "hello", categories);
+
+    expect(getCategoryLabels(byTag)).toEqual(["Custom", "People & body"]);
+    expect(getCategoryEmojis(byTag, "custom")).toEqual([
+      { type: "custom", id: "blob", label: "Blob wave", url: BLOB_URL },
+    ]);
   });
 });

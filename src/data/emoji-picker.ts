@@ -1,8 +1,8 @@
 import type {
   CustomCategory,
-  Emoji,
   EmojiData,
   EmojiDataEmoji,
+  EmojiPickerCustomEmoji,
   EmojiPickerData,
   EmojiPickerDataCategory,
   EmojiPickerDataRow,
@@ -13,13 +13,16 @@ import type {
 import { chunk } from "../utils/chunk";
 import { findEmojiDetails } from "./get-emoji-details";
 
-export function searchEmojis(emojis: EmojiDataEmoji[], search?: string) {
+export function searchEmojis<T extends { label: string; tags?: string[] }>(
+  emojis: T[],
+  search?: string,
+) {
   if (!search) {
     return emojis;
   }
 
   const searchText = search.toLowerCase().trim();
-  const scores = new WeakMap<Emoji, number>();
+  const scores = new WeakMap<T, number>();
 
   return emojis
     .filter((emoji) => {
@@ -29,7 +32,7 @@ export function searchEmojis(emojis: EmojiDataEmoji[], search?: string) {
         score += 10;
       }
 
-      for (const tag of emoji.tags) {
+      for (const tag of emoji.tags ?? []) {
         if (tag.toLowerCase().includes(searchText)) {
           score += 1;
         }
@@ -51,6 +54,7 @@ function getEmojiPickerEmoji(
   skinTone: SkinTone | undefined,
 ): EmojiPickerEmoji {
   return {
+    type: "native",
     emoji:
       skinTone && skinTone !== "none" && emoji.skins
         ? emoji.skins[skinTone]
@@ -109,10 +113,20 @@ export function getCustomEmojiPickerSections(
   search: string,
 ): (EmojiPickerDataSection & { index: number })[] {
   return categories.map((category) => {
-    const emojis: EmojiDataEmoji[] = [];
+    const emojis: (EmojiDataEmoji | EmojiPickerCustomEmoji)[] = [];
     const matchedEmojis = new Set<EmojiDataEmoji>();
+    const customEmojiIds = new Set<string>();
 
     for (const entry of category.emojis) {
+      if (typeof entry === "object" && "url" in entry) {
+        if (!customEmojiIds.has(entry.id)) {
+          customEmojiIds.add(entry.id);
+          emojis.push(entry);
+        }
+
+        continue;
+      }
+
       const { emoji, label } =
         typeof entry === "string" ? { emoji: entry, label: undefined } : entry;
       const matchedEmoji = findEmojiDetails(emoji, data.emojis);
@@ -131,8 +145,16 @@ export function getCustomEmojiPickerSections(
       ...getEmojiPickerSection(
         category.id,
         category.label,
-        searchEmojis(emojis, search).map((emoji) =>
-          getEmojiPickerEmoji(emoji, skinTone),
+        searchEmojis(emojis, search).map(
+          (emoji): EmojiPickerEmoji =>
+            "url" in emoji
+              ? {
+                  type: "custom",
+                  id: emoji.id,
+                  url: emoji.url,
+                  label: emoji.label,
+                }
+              : getEmojiPickerEmoji(emoji, skinTone),
         ),
         columns,
       ),

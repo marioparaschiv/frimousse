@@ -163,7 +163,7 @@ function EmojiPickerDataHandler({
  *
  * @example
  * ```tsx
- * <EmojiPicker.Root onEmojiSelect={({ emoji }) => console.log(emoji)}>
+ * <EmojiPicker.Root onEmojiSelect={(emoji) => console.log(emoji)}>
  *   <EmojiPicker.Search />
  *   <EmojiPicker.Viewport>
  *     <EmojiPicker.List />
@@ -1043,6 +1043,7 @@ const EmojiPickerListSizers = memo(
     const emojis = useMemo(
       () =>
         Array<EmojiPickerEmoji>(columns).fill({
+          type: "native",
           emoji: "🙂",
           label: "",
         }),
@@ -1142,7 +1143,15 @@ function DefaultEmojiPickerListEmoji({
 }: EmojiPickerListEmojiProps) {
   return (
     <button type="button" {...props}>
-      {emoji.emoji}
+      {emoji.type === "native" ? (
+        emoji.emoji
+      ) : (
+        <img
+          alt=""
+          src={emoji.url}
+          style={{ width: "1em", height: "1em", objectFit: "contain" }}
+        />
+      )}
     </button>
   );
 }
@@ -1175,7 +1184,11 @@ function DefaultEmojiPickerListRow({ ...props }: EmojiPickerListRowProps) {
  *     ),
  *     Emoji: ({ emoji, ...props }) => (
  *       <button {...props}>
- *         {emoji.emoji}
+ *         {emoji.type === "native" ? (
+ *           emoji.emoji
+ *         ) : (
+ *           <img alt="" src={emoji.url} />
+ *         )}
  *       </button>
  *     ),
  *     Row: ({ children, ...props }) => <div {...props}>{children}</div>,
@@ -1473,7 +1486,7 @@ function EmojiPickerEmpty({ children, ...props }: EmojiPickerEmptyProps) {
  * @example
  * ```tsx
  * <EmojiPicker.ActiveEmoji>
- *   {({ emoji }) => <span>{emoji}</span>}
+ *   {({ emoji }) => <span>{emoji?.label}</span>}
  * </EmojiPicker.ActiveEmoji>
  * ```
  *
@@ -1485,7 +1498,14 @@ function EmojiPickerEmpty({ children, ...props }: EmojiPickerEmptyProps) {
  *   {({ emoji }) => (
  *     <div>
  *       {emoji ? (
- *         <span>{emoji.emoji} {emoji.label}</span>
+ *         <span>
+ *           {emoji.type === "native" ? (
+ *             emoji.emoji
+ *           ) : (
+ *             <img alt="" src={emoji.url} />
+ *           )}{" "}
+ *           {emoji.label}
+ *         </span>
  *       ) : (
  *         <span>Select an emoji…</span>
  *       )}

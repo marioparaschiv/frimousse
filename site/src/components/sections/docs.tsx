@@ -403,7 +403,7 @@ export function Docs({
       <p>Surrounds all the emoji picker parts.</p>
       <CodeBlock lang="tsx">{`
         // [!code highlight:1]
-        <EmojiPicker.Root onEmojiSelect={({ emoji }) => console.log(emoji)}>
+        <EmojiPicker.Root onEmojiSelect={(emoji) => console.log(emoji)}>
           <EmojiPicker.Search />
           <EmojiPicker.Viewport>
             <EmojiPicker.List />
@@ -429,7 +429,18 @@ export function Docs({
       </PermalinkHeading>
       <PropertiesList>
         <PropertiesListRow name="onEmojiSelect" type="(emoji: Emoji) => void">
-          <p>A callback invoked when an emoji is selected.</p>
+          <p>
+            A callback invoked when an emoji is selected, either a native emoji
+            (
+            <code>
+              {"{"} type: "native", emoji, label {"}"}
+            </code>
+            ) or a custom image emoji (
+            <code>
+              {"{"} type: "custom", id, url, label {"}"}
+            </code>
+            ).
+          </p>
         </PropertiesListRow>
         <PropertiesListRow
           name="onEmojiContextMenu"
@@ -568,9 +579,9 @@ export function Docs({
         </PropertiesListRow>
         <PropertiesListRow name="categories" type="CustomCategory[]">
           <p>
-            Custom categories of emojis from the loaded data, inserted among the
-            built-in ones (e.g. favorites or recently used emojis). Each one is
-            defined as{" "}
+            Custom categories of emojis from the loaded data or custom image
+            emojis, inserted among the built-in ones (e.g. favorites or recently
+            used emojis). Each one is defined as{" "}
             <code>
               {"{"} id, label, index?, emojis {"}"}
             </code>
@@ -584,13 +595,19 @@ export function Docs({
             <code>
               {"{"} emoji, label {"}"}
             </code>{" "}
-            objects to override their label within the category.
+            objects to override their label within the category, as well as{" "}
+            <code>
+              {"{"} id, label, url, tags? {"}"}
+            </code>{" "}
+            objects for custom image emojis.
           </p>
           <p>
             Emojis are matched regardless of variation selectors and skin tones,
             and displayed with the current skin tone. Unknown emojis are
             skipped, and custom categories are searched like built-in ones and
-            hidden when empty. Changing them doesn’t reload the data.
+            hidden when empty. Custom image emojis are searched by label and
+            tags, without skin tones, and repeated ids within a category are
+            skipped. Changing them doesn’t reload the data.
           </p>
         </PropertiesListRow>
         <PropertiesListBasicRow>
@@ -738,14 +755,18 @@ export function Docs({
       </p>
       <CodeBlock lang="tsx">{`
         <EmojiPicker.List
-          // [!code highlight:11]
+          // [!code highlight:15]
           components={{
             CategoryHeader: ({ category, ...props }) => (
               <div {...props}>{category.label}</div>
             ),
             Emoji: ({ emoji, ...props }) => (
               <button {...props}>
-                {emoji.emoji}
+                {emoji.type === "native" ? (
+                  emoji.emoji
+                ) : (
+                  <img alt="" src={emoji.url} />
+                )}
               </button>
             ),
             Row: ({ children, ...props }) => <div {...props}>{children}</div>,
@@ -852,9 +873,10 @@ export function Docs({
           type="Emoji & { isActive: boolean }"
         >
           <p>
-            The emoji for this button, its label, and whether the emoji is
-            currently active (either hovered or selected via keyboard
-            navigation).
+            The emoji for this button (either a native emoji or a custom image
+            emoji, distinguished by <code>type</code>), its label, and whether
+            the emoji is currently active (either hovered or selected via
+            keyboard navigation).
           </p>
         </PropertiesListRow>
         <PropertiesListBasicRow className="pl-8!">
@@ -1063,7 +1085,7 @@ export function Docs({
       </p>
       <CodeBlock lang="tsx">{`
         <EmojiPicker.ActiveEmoji>
-          {({ emoji }) => <span>{emoji}</span>}
+          {({ emoji }) => <span>{emoji?.label}</span>}
         </EmojiPicker.ActiveEmoji>
       `}</CodeBlock>
       <p>It can be used to build a preview area next to the list.</p>
@@ -1072,7 +1094,14 @@ export function Docs({
           {({ emoji }) => (
             <div>
               {emoji ? (
-                <span>{emoji.emoji} {emoji.label}</span>
+                <span>
+                  {emoji.type === "native" ? (
+                    emoji.emoji
+                  ) : (
+                    <img alt="" src={emoji.url} />
+                  )}{" "}
+                  {emoji.label}
+                </span>
               ) : (
                 <span>Select an emoji…</span>
               )}
@@ -1145,7 +1174,14 @@ export function Docs({
 
         <div>
           {activeEmoji ? (
-            <span>{activeEmoji.emoji} {activeEmoji.label}</span>
+            <span>
+              {activeEmoji.type === "native" ? (
+                activeEmoji.emoji
+              ) : (
+                <img alt="" src={activeEmoji.url} />
+              )}{" "}
+              {activeEmoji.label}
+            </span>
           ) : (
             <span>Select an emoji…</span>
           )}

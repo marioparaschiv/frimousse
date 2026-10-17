@@ -354,11 +354,15 @@ export function $activeEmojiKey(state: EmojiPickerStore) {
   return getEmojiPickerEmojiKey(activeRow.categoryId, activeEmoji);
 }
 
-// Keys are shared across skin tones and variation selectors
+// Native keys are shared across skin tones and variation selectors
 export function getEmojiPickerEmojiKey(
   categoryId: string,
   emoji: EmojiPickerEmoji,
 ) {
+  if (emoji.type === "custom") {
+    return `${categoryId}:${emoji.id}`;
+  }
+
   return `${categoryId}:${emoji.emoji.replace(EMOJI_KEY_IGNORED_CHARACTERS, "")}`;
 }
 
@@ -434,7 +438,20 @@ export function sameEmojiPickerEmoji(
   a: EmojiPickerEmoji | undefined,
   b: EmojiPickerEmoji | undefined,
 ) {
-  return a?.emoji === b?.emoji && a?.label === b?.label;
+  if (!a || !b) {
+    return a === b;
+  }
+
+  if (a.type === "custom") {
+    return (
+      b.type === "custom" &&
+      a.id === b.id &&
+      a.url === b.url &&
+      a.label === b.label
+    );
+  }
+
+  return b.type === "native" && a.emoji === b.emoji && a.label === b.label;
 }
 
 export function sameEmojiPickerRow(

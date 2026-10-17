@@ -26,7 +26,14 @@ import { useSelector, useSelectorKey } from "./utils/store";
  *
  * <div>
  *   {activeEmoji ? (
- *     <span>{activeEmoji.emoji} {activeEmoji.label}</span>
+ *     <span>
+ *       {activeEmoji.type === "native" ? (
+ *         activeEmoji.emoji
+ *       ) : (
+ *         <img alt="" src={activeEmoji.url} />
+ *       )}{" "}
+ *       {activeEmoji.label}
+ *     </span>
  *   ) : (
  *     <span>Select an emoji…</span>
  *   )}

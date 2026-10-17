@@ -112,9 +112,39 @@ export type EmojiDataCache<M = undefined> = {
   clear: () => void;
 };
 
-export type EmojiPickerEmoji = {
-  emoji: string;
+export type EmojiPickerEmoji =
+  | {
+      type: "native";
+      emoji: string;
+      label: string;
+    }
+  | {
+      type: "custom";
+      id: string;
+      url: string;
+      label: string;
+    };
+
+export type EmojiPickerCustomEmoji = {
+  /**
+   * A unique identifier for the emoji.
+   */
+  id: string;
+
+  /**
+   * The label of the emoji, used for accessibility and search.
+   */
   label: string;
+
+  /**
+   * The URL of the emoji's image.
+   */
+  url: string;
+
+  /**
+   * Additional search terms for the emoji.
+   */
+  tags?: string[];
 };
 
 export type EmojiPickerCategory = {
@@ -142,13 +172,20 @@ export type EmojiPickerCustomCategory = {
   index?: number;
 
   /**
-   * The emojis of the category, optionally with a label used only within it.
+   * The emojis of the category: native emojis, optionally with a label used
+   * only within it, or custom image emojis.
    *
-   * Emojis are matched against the loaded data regardless of variation
+   * Native emojis are matched against the loaded data regardless of variation
    * selectors and skin tones, and displayed with the current skin tone.
-   * Unknown emojis and repeated emojis within the category are skipped.
+   * Custom emojis are searched by label and tags, without skin tones.
+   * Unknown emojis and repeated emojis (or custom emoji ids) within the
+   * category are skipped.
    */
-  emojis: (string | { emoji: string; label: string })[];
+  emojis: (
+    | string
+    | { emoji: string; label: string }
+    | Resolve<EmojiPickerCustomEmoji>
+  )[];
 };
 
 export type EmojiPickerDataRow = {
@@ -218,7 +255,8 @@ export interface EmojiPickerListCategoryHeaderProps
 export interface EmojiPickerListEmojiProps
   extends Omit<ComponentProps<"button">, "children"> {
   /**
-   * The emoji for this button, its label, and whether the emoji is currently
+   * The emoji for this button (either a native emoji or a custom image emoji,
+   * distinguished by `type`), its label, and whether the emoji is currently
    * active (either hovered or selected via keyboard navigation).
    */
   emoji: Resolve<Emoji & { isActive: boolean }>;
@@ -233,7 +271,8 @@ export interface EmojiPickerListProps extends ComponentProps<"div"> {
 
 export interface EmojiPickerRootProps extends ComponentProps<"div"> {
   /**
-   * A callback invoked when an emoji is selected.
+   * A callback invoked when an emoji is selected, either a native emoji
+   * (`type: "native"`) or a custom image emoji (`type: "custom"`).
    */
   onEmojiSelect?: (emoji: Emoji) => void;
 
@@ -271,8 +310,8 @@ export interface EmojiPickerRootProps extends ComponentProps<"div"> {
   resolveEmojiData?: EmojiDataResolver;
 
   /**
-   * Custom categories of emojis from the loaded data, inserted among the
-   * built-in ones (e.g. favorites or recently used emojis).
+   * Custom categories of emojis from the loaded data or custom image emojis,
+   * inserted among the built-in ones (e.g. favorites or recently used emojis).
    *
    * They are searched like built-in categories and hidden when empty.
    * Changing them doesn't reload data.

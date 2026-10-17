@@ -98,7 +98,11 @@ describe("onDataChange", () => {
 
     expect(store.get().activeRowIndex).toBe(2);
     expect(store.get().activeColumnIndex).toBe(0);
-    expect($activeEmoji(store.get())?.emoji).toBe("😄");
+    expect($activeEmoji(store.get())).toEqual({
+      type: "native",
+      emoji: "😄",
+      label: "Grinning face with smiling eyes",
+    });
     expect($activeEmojiKey(store.get())).toBe("built-in:0:😄");
   });
 
@@ -125,6 +129,44 @@ describe("onDataChange", () => {
     expect($activeEmojiKey(store.get())).toBe("pinned:😃");
   });
 
+  it("should keep a keyboard active custom emoji by its id", () => {
+    const parrot = {
+      id: "parrot",
+      label: "Party parrot",
+      url: "https://example.com/parrot.png",
+    };
+    const store = createStore();
+
+    store
+      .get()
+      .onDataChange(
+        getData([{ id: "server", label: "Server", emojis: [parrot] }]),
+        "",
+      );
+    store.get().onActiveEmojiChange("keyboard", 0, 0);
+
+    store.get().onDataChange(
+      getData([
+        {
+          id: "server",
+          label: "Server",
+          emojis: ["😀", { ...parrot, label: "Renamed parrot" }],
+        },
+      ]),
+      "",
+    );
+
+    expect(store.get().activeRowIndex).toBe(0);
+    expect(store.get().activeColumnIndex).toBe(1);
+    expect($activeEmojiKey(store.get())).toBe("server:parrot");
+    expect($activeEmoji(store.get())).toEqual({
+      type: "custom",
+      id: "parrot",
+      label: "Renamed parrot",
+      url: "https://example.com/parrot.png",
+    });
+  });
+
   it("should clamp the keyboard active emoji when it disappears", () => {
     const store = createStore();
 
@@ -144,7 +186,10 @@ describe("onDataChange", () => {
 
     expect(store.get().activeRowIndex).toBe(2);
     expect(store.get().activeColumnIndex).toBe(0);
-    expect($activeEmoji(store.get())?.emoji).toBe("👋");
+    expect($activeEmoji(store.get())).toMatchObject({
+      type: "native",
+      emoji: "👋",
+    });
   });
 
   it("should reset the active emoji when search changes", () => {

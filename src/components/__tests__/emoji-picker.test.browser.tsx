@@ -25,6 +25,10 @@ import * as EmojiPicker from "../emoji-picker";
 
 const EMOJI_BUTTON_HEIGHT = 28;
 
+function getEmojiText(emoji: Emoji) {
+  return emoji.type === "native" ? emoji.emoji : emoji.id;
+}
+
 function DefaultPage({
   children,
   locale,
@@ -65,7 +69,9 @@ function DefaultPage({
   return (
     <>
       <div>
-        <p data-testid="selected-emoji">{selectedEmoji?.emoji}</p>
+        <p data-testid="selected-emoji">
+          {selectedEmoji && getEmojiText(selectedEmoji)}
+        </p>
         {children}
       </div>
       <div>
@@ -102,7 +108,7 @@ function DefaultPage({
                     style={{ height: EMOJI_BUTTON_HEIGHT, ...style }}
                     {...props}
                   >
-                    {emoji.emoji}
+                    {getEmojiText(emoji)}
                   </button>
                 ),
                 ...listComponents,
@@ -165,12 +171,12 @@ describe("EmojiPicker", () => {
         listComponents={{
           Emoji: ({ emoji, style, ...props }) => (
             <button
-              data-testid={`emoji: ${emoji.emoji}`}
+              data-testid={`emoji: ${getEmojiText(emoji)}`}
               style={{ height: EMOJI_BUTTON_HEIGHT, ...style }}
               type="button"
               {...props}
             >
-              {emoji.isActive ? emoji.emoji : null}
+              {emoji.isActive ? getEmojiText(emoji) : null}
             </button>
           ),
         }}
@@ -246,7 +252,7 @@ describe("EmojiPicker", () => {
                 background: emoji.isActive ? "red" : undefined,
               }}
             >
-              {emoji.emoji}
+              {getEmojiText(emoji)}
             </button>
           ),
         }}
@@ -751,7 +757,7 @@ describe("EmojiPicker.List", () => {
         listComponents={{
           Emoji: ({ emoji, style, ...props }) => (
             <button
-              data-testid={`custom-emoji: ${emoji.emoji}`}
+              data-testid={`custom-emoji: ${getEmojiText(emoji)}`}
               style={{ height: EMOJI_BUTTON_HEIGHT, ...style }}
               type="button"
               {...props}
@@ -1145,6 +1151,20 @@ describe("EmojiPicker with custom categories", () => {
     label: "Pinned",
     emojis: ["😀", "😃"],
   };
+  const IMAGE_URL =
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E";
+  const PARROT = {
+    id: "parrot",
+    label: "Party parrot",
+    url: `${IMAGE_URL}#parrot`,
+    tags: ["bird"],
+  };
+  const BLOB = { id: "blob", label: "Blob wave", url: `${IMAGE_URL}#blob` };
+  const SERVER: CustomCategory = {
+    id: "server",
+    label: "Server",
+    emojis: [PARROT, BLOB, PARROT],
+  };
 
   function nextFrame() {
     return new Promise((resolve) => requestAnimationFrame(resolve));
@@ -1195,7 +1215,7 @@ describe("EmojiPicker with custom categories", () => {
       Emoji: ({ emoji, style, ...props }) => (
         <Profiler id={`emoji ${emoji.label}`} onRender={onRender}>
           <button style={{ height: EMOJI_BUTTON_HEIGHT, ...style }} {...props}>
-            {emoji.emoji}
+            {getEmojiText(emoji)}
           </button>
         </Profiler>
       ),
@@ -1234,6 +1254,27 @@ describe("EmojiPicker with custom categories", () => {
 
     expect(renders.sort()).toEqual([
       "mount emoji Grinning face with smiling eyes",
+      "update row 0",
+    ]);
+
+    renders.length = 0;
+
+    screen.rerender(
+      <DefaultPage
+        categories={[{ ...PINNED, emojis: [...PINNED.emojis, "😄", PARROT] }]}
+        listComponents={listComponents}
+        resolveEmojiData={resolveEmojiData}
+      />,
+    );
+
+    await expect
+      .element(page.getByRole("row").first().getByRole("gridcell").nth(3))
+      .toHaveAccessibleName("Party parrot");
+    await nextFrame();
+    await nextFrame();
+
+    expect(renders.sort()).toEqual([
+      "mount emoji Party parrot",
       "update row 0",
     ]);
     expect(resolveEmojiData).toHaveBeenCalledTimes(1);
@@ -1281,5 +1322,111 @@ describe("EmojiPicker with custom categories", () => {
     await expect
       .element(page.getByText("😀").nth(1))
       .not.toHaveAttribute("data-active");
+  });
+
+  it("should render custom emojis as images with the default component", async () => {
+    page.render(
+      <DefaultPage
+        categories={[SERVER]}
+        listComponents={{ Emoji: undefined }}
+      />,
+    );
+
+    const firstRow = page.getByRole("row").first().getByRole("gridcell");
+
+    await expect.element(firstRow.nth(0)).toHaveAccessibleName("Party parrot");
+    await expect.element(firstRow.nth(1)).toHaveAccessibleName("Blob wave");
+    await expect.element(firstRow.nth(2)).not.toBeInTheDocument();
+    expect(
+      firstRow.nth(0).element().querySelector("img")?.getAttribute("src"),
+    ).toBe(PARROT.url);
+  });
+
+  it("should support selecting custom emojis and requesting their context menu", async () => {
+    const onEmojiContextMenu = vi.fn();
+
+    page.render(
+      <DefaultPage
+        categories={[SERVER]}
+        onEmojiContextMenu={onEmojiContextMenu}
+      />,
+    );
+
+    await page.getByRole("gridcell", { name: "Party parrot" }).click();
+
+    await expect
+      .element(page.getByTestId("selected-emoji"))
+      .toHaveTextContent("parrot");
+
+    await page.getByTestId("search").click();
+    await userEvent.keyboard("{ArrowDown}{ArrowRight}{Enter}");
+
+    await expect
+      .element(page.getByTestId("selected-emoji"))
+      .toHaveTextContent("blob");
+
+    await page
+      .getByRole("gridcell", { name: "Blob wave" })
+      .click({ button: "right" });
+
+    expect(onEmojiContextMenu).toHaveBeenCalledTimes(1);
+    expect(onEmojiContextMenu).toHaveBeenLastCalledWith(
+      { type: "custom", id: "blob", label: "Blob wave", url: BLOB.url },
+      expect.objectContaining({ type: "contextmenu" }),
+    );
+  });
+
+  it("should search custom emojis by label and tags", async () => {
+    page.render(<DefaultPage categories={[SERVER]} />);
+
+    await page.getByTestId("search").fill("bird");
+
+    await expect
+      .element(page.getByRole("gridcell", { name: "Party parrot" }))
+      .toBeInTheDocument();
+    await expect
+      .element(page.getByRole("gridcell", { name: "Blob wave" }))
+      .not.toBeInTheDocument();
+
+    await page.getByTestId("search").fill("blob");
+
+    await expect
+      .element(page.getByRole("gridcell", { name: "Blob wave" }))
+      .toBeInTheDocument();
+    await expect
+      .element(page.getByRole("gridcell", { name: "Party parrot" }))
+      .not.toBeInTheDocument();
+  });
+
+  it("should expose the active custom emoji only within its category", async () => {
+    page.render(
+      <DefaultPage
+        categories={[
+          SERVER,
+          { id: "pinned", label: "Pinned", emojis: [PARROT] },
+        ]}
+        rootChildren={
+          <EmojiPicker.ActiveEmoji>
+            {({ emoji }) =>
+              emoji ? (
+                <p data-testid="active-emoji">
+                  {emoji.type}: {emoji.label}
+                </p>
+              ) : null
+            }
+          </EmojiPicker.ActiveEmoji>
+        }
+      />,
+    );
+
+    const parrots = page.getByRole("gridcell", { name: "Party parrot" });
+
+    await parrots.first().hover();
+
+    await expect.element(parrots.first()).toHaveAttribute("data-active");
+    await expect.element(parrots.nth(1)).not.toHaveAttribute("data-active");
+    await expect
+      .element(page.getByTestId("active-emoji"))
+      .toHaveTextContent("custom: Party parrot");
   });
 });
