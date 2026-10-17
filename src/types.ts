@@ -197,6 +197,18 @@ export interface EmojiPickerRootProps extends ComponentProps<"div"> {
   onEmojiSelect?: (emoji: Emoji) => void;
 
   /**
+   * A callback invoked when a context menu is requested on an emoji, either
+   * by right-clicking it or by pressing the `ContextMenu` key or `Shift+F10`
+   * while the viewport is focused (for the active emoji).
+   *
+   * The native event is passed so its default behavior can be prevented.
+   */
+  onEmojiContextMenu?: (
+    emoji: Emoji,
+    event: MouseEvent | KeyboardEvent,
+  ) => void;
+
+  /**
    * The locale of the emoji picker.
    *
    * Custom locales can be used with `resolveEmojiData`.

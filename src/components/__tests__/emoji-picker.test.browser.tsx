@@ -33,6 +33,7 @@ function DefaultPage({
   emptyChildren = <div data-testid="empty">No emojis found</div>,
   sticky = true,
   resolveEmojiData,
+  onEmojiContextMenu,
 }: {
   children?: ReactNode;
   locale?: EmojiPickerRootProps["locale"];
@@ -48,6 +49,7 @@ function DefaultPage({
   rootChildren?: EmojiPickerRootProps["children"];
   emptyChildren?: EmojiPickerEmptyProps["children"];
   sticky?: EmojiPickerRootProps["sticky"];
+  onEmojiContextMenu?: EmojiPickerRootProps["onEmojiContextMenu"];
 }) {
   const [selectedEmoji, setSelectedEmoji] = useState<Emoji | null>(null);
 
@@ -63,6 +65,7 @@ function DefaultPage({
           data-testid="root"
           emojiVersion={emojiVersion}
           locale={locale}
+          onEmojiContextMenu={onEmojiContextMenu}
           onEmojiSelect={setSelectedEmoji}
           resolveEmojiData={resolveEmojiData}
           skinTone={skinTone}
@@ -286,6 +289,62 @@ describe("EmojiPicker", () => {
     await expect
       .element(page.getByTestId("selected-emoji"))
       .toHaveTextContent("😀");
+  });
+
+  it("should support requesting a context menu for an emoji on right click", async () => {
+    const onEmojiContextMenu = vi.fn();
+
+    page.render(<DefaultPage onEmojiContextMenu={onEmojiContextMenu} />);
+
+    await page.getByTestId("search").click();
+    await userEvent.keyboard("{ArrowDown}{ArrowRight}");
+
+    page
+      .getByText("😀")
+      .element()
+      .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+
+    expect(onEmojiContextMenu).toHaveBeenCalledTimes(1);
+    expect(onEmojiContextMenu).toHaveBeenLastCalledWith(
+      expect.objectContaining({ emoji: "😀" }),
+      expect.objectContaining({ type: "contextmenu" }),
+    );
+
+    await page.getByText("😃").click({ button: "right" });
+
+    expect(onEmojiContextMenu).toHaveBeenCalledTimes(2);
+    expect(onEmojiContextMenu).toHaveBeenLastCalledWith(
+      expect.objectContaining({ emoji: "😃" }),
+      expect.objectContaining({ type: "contextmenu" }),
+    );
+  });
+
+  it("should support requesting a context menu for the active emoji with the keyboard", async () => {
+    const onEmojiContextMenu = vi.fn();
+
+    page.render(<DefaultPage onEmojiContextMenu={onEmojiContextMenu} />);
+
+    await page.getByTestId("search").click();
+    await userEvent.keyboard("{ArrowDown}{ContextMenu}");
+
+    expect(onEmojiContextMenu).not.toHaveBeenCalled();
+
+    await userEvent.tab();
+    await userEvent.keyboard("{ArrowRight}{ContextMenu}");
+
+    expect(onEmojiContextMenu).toHaveBeenCalledTimes(1);
+    expect(onEmojiContextMenu).toHaveBeenLastCalledWith(
+      expect.objectContaining({ emoji: "😃" }),
+      expect.objectContaining({ type: "keydown", key: "ContextMenu" }),
+    );
+
+    await userEvent.keyboard("{ArrowRight}{Shift>}{F10}{/Shift}");
+
+    expect(onEmojiContextMenu).toHaveBeenCalledTimes(2);
+    expect(onEmojiContextMenu).toHaveBeenLastCalledWith(
+      expect.objectContaining({ emoji: "😄" }),
+      expect.objectContaining({ type: "keydown", key: "F10", shiftKey: true }),
+    );
   });
 
   it("should reset the active emoji when losing focus", async () => {

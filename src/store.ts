@@ -19,6 +19,7 @@ export type EmojiPickerStore = {
   sticky: boolean;
   skinTone: SkinTone;
   onEmojiSelect: NonNullable<EmojiPickerRootProps["onEmojiSelect"]>;
+  onEmojiContextMenu: NonNullable<EmojiPickerRootProps["onEmojiContextMenu"]>;
 
   data: EmojiPickerData | null | undefined;
   search: string;
@@ -58,6 +59,7 @@ export type EmojiPickerStore = {
 
 export function createEmojiPickerStore(
   onEmojiSelect: NonNullable<EmojiPickerRootProps["onEmojiSelect"]>,
+  onEmojiContextMenu: NonNullable<EmojiPickerRootProps["onEmojiContextMenu"]>,
   initialLocale: Locale,
   initialColumns: number,
   initialSticky: boolean,
@@ -71,6 +73,7 @@ export function createEmojiPickerStore(
     sticky: initialSticky,
     skinTone: initialSkinTone,
     onEmojiSelect,
+    onEmojiContextMenu,
 
     data: null,
     search: "",

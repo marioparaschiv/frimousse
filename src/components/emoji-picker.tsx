@@ -162,6 +162,7 @@ const EmojiPickerRoot = forwardRef<HTMLDivElement, EmojiPickerRootProps>(
       columns = 9,
       skinTone = "none",
       onEmojiSelect = noop,
+      onEmojiContextMenu = noop,
       emojiVersion,
       emojibaseUrl,
       resolveEmojiData,
@@ -175,9 +176,11 @@ const EmojiPickerRoot = forwardRef<HTMLDivElement, EmojiPickerRootProps>(
     forwardedRef,
   ) => {
     const stableOnEmojiSelect = useStableCallback(onEmojiSelect);
+    const stableOnEmojiContextMenu = useStableCallback(onEmojiContextMenu);
     const store = useCreateStore(() =>
       createEmojiPickerStore(
         stableOnEmojiSelect,
+        stableOnEmojiContextMenu,
         locale,
         columns,
         sticky,
@@ -268,9 +271,15 @@ const EmojiPickerRoot = forwardRef<HTMLDivElement, EmojiPickerRootProps>(
       }
 
       function handleKeyDown(event: KeyboardEvent) {
+        const isContextMenu =
+          event.key === "ContextMenu" ||
+          (event.key === "F10" && event.shiftKey);
+
         if (
           event.defaultPrevented ||
-          (!event.key.startsWith("Arrow") && event.key !== "Enter")
+          (!event.key.startsWith("Arrow") &&
+            event.key !== "Enter" &&
+            !isContextMenu)
         ) {
           return;
         }
@@ -278,10 +287,12 @@ const EmojiPickerRoot = forwardRef<HTMLDivElement, EmojiPickerRootProps>(
         const {
           data,
           onEmojiSelect,
+          onEmojiContextMenu,
           onActiveEmojiChange,
           interaction,
           activeColumnIndex,
           activeRowIndex,
+          viewportRef,
         } = store.get();
 
         // Select the active emoji with enter if it exists
@@ -292,6 +303,17 @@ const EmojiPickerRoot = forwardRef<HTMLDivElement, EmojiPickerRootProps>(
             event.preventDefault();
 
             onEmojiSelect(activeEmoji);
+          }
+        }
+
+        // Request a context menu for the active emoji if the viewport is focused
+        if (isContextMenu && event.target === viewportRef?.current) {
+          const activeEmoji = $activeEmoji(store.get());
+
+          if (activeEmoji) {
+            event.preventDefault();
+
+            onEmojiContextMenu(activeEmoji, event);
           }
         }
 
@@ -870,6 +892,13 @@ const EmojiPickerListEmoji = memo(
       store.get().onEmojiSelect(emoji);
     }, [emoji]);
 
+    const handleContextMenu = useCallback(
+      (event: ReactMouseEvent<HTMLButtonElement>) => {
+        store.get().onEmojiContextMenu(emoji, event.nativeEvent);
+      },
+      [emoji],
+    );
+
     const handlePointerEnter = useCallback(() => {
       store.get().onActiveEmojiChange("pointer", columnIndex, rowIndex);
     }, [columnIndex, rowIndex]);
@@ -882,6 +911,7 @@ const EmojiPickerListEmoji = memo(
       <Emoji
         {...listEmojiProps(emoji, columnIndex, isActive)}
         onClick={handleSelect}
+        onContextMenu={handleContextMenu}
         onPointerDown={preventDefault}
         onPointerEnter={handlePointerEnter}
         onPointerLeave={handlePointerLeave}

@@ -431,6 +431,20 @@ export function Docs({
         <PropertiesListRow name="onEmojiSelect" type="(emoji: Emoji) => void">
           <p>A callback invoked when an emoji is selected.</p>
         </PropertiesListRow>
+        <PropertiesListRow
+          name="onEmojiContextMenu"
+          type="(emoji: Emoji, event: MouseEvent | KeyboardEvent) => void"
+        >
+          <p>
+            A callback invoked when a context menu is requested on an emoji,
+            either by right-clicking it or by pressing the{" "}
+            <code>ContextMenu</code> key or <code>Shift+F10</code> while the
+            viewport is focused (for the active emoji).
+          </p>
+          <p>
+            The native event is passed so its default behavior can be prevented.
+          </p>
+        </PropertiesListRow>
         <PropertiesListRow defaultValue={`"en"`} name="locale" type="Locale">
           <p>The locale of the emoji picker.</p>
           <p>
