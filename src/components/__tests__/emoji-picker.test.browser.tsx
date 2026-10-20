@@ -393,10 +393,7 @@ describe("EmojiPicker", () => {
 
   it("should fallback to default values for unsupported locales and skin tones", async () => {
     page.render(
-      <DefaultPage
-        locale="unsupported"
-        skinTone={"unsupported" as SkinTone}
-      />,
+      <DefaultPage locale="unsupported" skinTone={"unsupported" as SkinTone} />,
     );
 
     await expect
@@ -615,92 +612,81 @@ describe("EmojiPicker.Viewport", () => {
   it.each([
     ["with sticky headers", true],
     ["without sticky headers", false],
-  ])(
-    "should virtualize rows based on the viewport height %s",
-    async (_, sticky) => {
-      function Page() {
-        const [viewportHeight, setViewportHeight] = useState(400);
-        const [rowHeight, setRowHeight] = useState(30);
-        const [categoryHeaderHeight, setCategoryHeaderHeight] = useState(30);
+  ])("should virtualize rows based on the viewport height %s", async (_, sticky) => {
+    function Page() {
+      const [viewportHeight, setViewportHeight] = useState(400);
+      const [rowHeight, setRowHeight] = useState(30);
+      const [categoryHeaderHeight, setCategoryHeaderHeight] = useState(30);
 
-        return (
-          <DefaultPage
-            listComponents={{
-              Row: ({ children, style, ...props }) => (
-                <div
-                  data-testid="custom-row"
-                  {...props}
-                  style={{ ...style, height: rowHeight }}
-                >
-                  {children}
-                </div>
-              ),
-              CategoryHeader: ({ category, style, ...props }) => (
-                <div
-                  data-testid="custom-category-header"
-                  {...props}
-                  style={{ ...style, height: categoryHeaderHeight }}
-                >
-                  {category.label}
-                </div>
-              ),
-            }}
-            sticky={sticky}
-          >
-            <input
-              data-testid="viewport-height"
-              onChange={(event) =>
-                setViewportHeight(Number(event.target.value))
-              }
-              type="number"
-              value={viewportHeight}
-            />
-            <input
-              data-testid="row-height"
-              onChange={(event) => setRowHeight(Number(event.target.value))}
-              type="number"
-              value={rowHeight}
-            />
-            <input
-              data-testid="category-header-height"
-              onChange={(event) =>
-                setCategoryHeaderHeight(Number(event.target.value))
-              }
-              type="number"
-              value={categoryHeaderHeight}
-            />
-          </DefaultPage>
-        );
-      }
+      return (
+        <DefaultPage
+          listComponents={{
+            Row: ({ children, style, ...props }) => (
+              <div
+                data-testid="custom-row"
+                {...props}
+                style={{ ...style, height: rowHeight }}
+              >
+                {children}
+              </div>
+            ),
+            CategoryHeader: ({ category, style, ...props }) => (
+              <div
+                data-testid="custom-category-header"
+                {...props}
+                style={{ ...style, height: categoryHeaderHeight }}
+              >
+                {category.label}
+              </div>
+            ),
+          }}
+          sticky={sticky}
+        >
+          <input
+            data-testid="viewport-height"
+            onChange={(event) => setViewportHeight(Number(event.target.value))}
+            type="number"
+            value={viewportHeight}
+          />
+          <input
+            data-testid="row-height"
+            onChange={(event) => setRowHeight(Number(event.target.value))}
+            type="number"
+            value={rowHeight}
+          />
+          <input
+            data-testid="category-header-height"
+            onChange={(event) =>
+              setCategoryHeaderHeight(Number(event.target.value))
+            }
+            type="number"
+            value={categoryHeaderHeight}
+          />
+        </DefaultPage>
+      );
+    }
 
-      page.render(<Page />);
+    page.render(<Page />);
 
-      await expect.element(page.getByText("😀")).toBeInTheDocument();
+    await expect.element(page.getByText("😀")).toBeInTheDocument();
 
-      await expect.element(page.getByRole("row").nth(10)).toBeInTheDocument();
-      await expect
-        .element(page.getByRole("row").nth(20))
-        .not.toBeInTheDocument();
+    await expect.element(page.getByRole("row").nth(10)).toBeInTheDocument();
+    await expect.element(page.getByRole("row").nth(20)).not.toBeInTheDocument();
 
-      await page.getByTestId("viewport-height").fill("500");
-      await page.getByTestId("row-height").fill("20");
-      await page.getByTestId("category-header-height").fill("20");
+    await page.getByTestId("viewport-height").fill("500");
+    await page.getByTestId("row-height").fill("20");
+    await page.getByTestId("category-header-height").fill("20");
 
-      await expect.element(page.getByRole("row").nth(10)).toBeInTheDocument();
-      await expect.element(page.getByRole("row").nth(20)).toBeInTheDocument();
+    await expect.element(page.getByRole("row").nth(10)).toBeInTheDocument();
+    await expect.element(page.getByRole("row").nth(20)).toBeInTheDocument();
 
-      await page.getByTestId("viewport-height").fill("200");
-      await page.getByTestId("row-height").fill("100");
-      await page.getByTestId("category-header-height").fill("400");
+    await page.getByTestId("viewport-height").fill("200");
+    await page.getByTestId("row-height").fill("100");
+    await page.getByTestId("category-header-height").fill("400");
 
-      await expect
-        .element(page.getByRole("row").nth(10))
-        .not.toBeInTheDocument();
-      await expect
-        .element(page.getByRole("row").nth(20))
-        .not.toBeInTheDocument();
-    },
-  );
+    await expect.element(page.getByRole("row").nth(10)).not.toBeInTheDocument();
+    await expect.element(page.getByRole("row").nth(20)).not.toBeInTheDocument();
+  });
 
   it.each([
     ["with sticky headers", true],
@@ -887,8 +873,8 @@ describe("EmojiPicker.SkinToneSelector", () => {
 });
 
 describe("EmojiPicker.Loading", () => {
-  it("should render when loading emojis", async () => {
-    page.render(<DefaultPage />);
+  it("should render while emoji data is loading", async () => {
+    page.render(<DefaultPage resolveEmojiData={() => new Promise(() => {})} />);
 
     await expect.element(page.getByTestId("loading")).toBeInTheDocument();
   });
@@ -1028,22 +1014,22 @@ describe("EmojiPicker with a custom emoji data resolver", () => {
 
   const resolveCustomEmojiData = () => CUSTOM_EMOJI_DATA;
 
-  it.each(["ne", "ne-custom"])(
-    "should render custom data for locale %s without fetching",
-    async (locale) => {
-      const fetchSpy = vi.spyOn(globalThis, "fetch");
+  it.each([
+    "ne",
+    "ne-custom",
+  ])("should render custom data for locale %s without fetching", async (locale) => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
 
-      page.render(
-        <DefaultPage locale={locale} resolveEmojiData={resolveCustomEmojiData} />,
-      );
+    page.render(
+      <DefaultPage locale={locale} resolveEmojiData={resolveCustomEmojiData} />,
+    );
 
-      await expect.element(page.getByText("😀")).toBeInTheDocument();
-      await expect.element(page.getByText("😍")).toBeInTheDocument();
-      await expect.element(page.getByText("🇳🇵")).toBeInTheDocument();
+    await expect.element(page.getByText("😀")).toBeInTheDocument();
+    await expect.element(page.getByText("😍")).toBeInTheDocument();
+    await expect.element(page.getByText("🇳🇵")).toBeInTheDocument();
 
-      expect(fetchSpy).not.toHaveBeenCalled();
-    },
-  );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 
   it("should search custom data using custom labels and tags", async () => {
     page.render(
@@ -1099,7 +1085,10 @@ describe("EmojiPicker with a custom emoji data resolver", () => {
       const [count, setCount] = useState(0);
 
       return (
-        <DefaultPage locale="ne" resolveEmojiData={(...args) => resolve(...args)}>
+        <DefaultPage
+          locale="ne"
+          resolveEmojiData={(...args) => resolve(...args)}
+        >
           <button onClick={() => setCount(count + 1)} type="button">
             Rerender {count}
           </button>
@@ -1122,27 +1111,27 @@ describe("EmojiPicker with a custom emoji data resolver", () => {
     expect(resolve).toHaveBeenCalledTimes(1);
   });
 
-  it.each(["synchronous", "asynchronous"])(
-    "should handle %s resolver errors",
-    async (kind) => {
-      const error = new Error("Failed to load emoji data");
-      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  it.each([
+    "synchronous",
+    "asynchronous",
+  ])("should handle %s resolver errors", async (kind) => {
+    const error = new Error("Failed to load emoji data");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-      page.render(
-        <DefaultPage
-          resolveEmojiData={() => {
-            if (kind === "asynchronous") {
-              return Promise.reject(error);
-            }
+    page.render(
+      <DefaultPage
+        resolveEmojiData={() => {
+          if (kind === "asynchronous") {
+            return Promise.reject(error);
+          }
 
-            throw error;
-          }}
-        />,
-      );
+          throw error;
+        }}
+      />,
+    );
 
-      await expect.poll(() => errorSpy.mock.calls).toEqual([[error]]);
-    },
-  );
+    await expect.poll(() => errorSpy.mock.calls).toEqual([[error]]);
+  });
 });
 
 describe("EmojiPicker with custom categories", () => {
@@ -1203,8 +1192,10 @@ describe("EmojiPicker with custom categories", () => {
 
   it("should only render the changed rows and emojis when categories change", async () => {
     const renders: string[] = [];
-    const onRender: ProfilerOnRenderCallback = (id, phase) => {
-      renders.push(`${phase} ${id}`);
+    // Store updates render inside the committing layout effect, so React
+    // reports them as nested updates rather than mounts and updates.
+    const onRender: ProfilerOnRenderCallback = (id) => {
+      renders.push(id);
     };
     const listComponents: EmojiPickerListProps["components"] = {
       Row: ({ children, ...props }) => (
@@ -1253,8 +1244,8 @@ describe("EmojiPicker with custom categories", () => {
     await nextFrame();
 
     expect(renders.sort()).toEqual([
-      "mount emoji Grinning face with smiling eyes",
-      "update row 0",
+      "emoji Grinning face with smiling eyes",
+      "row 0",
     ]);
 
     renders.length = 0;
@@ -1274,8 +1265,8 @@ describe("EmojiPicker with custom categories", () => {
     await nextFrame();
 
     expect(renders.sort()).toEqual([
-      "mount emoji Party parrot",
-      "update row 0",
+      "emoji Party parrot",
+      "row 0",
     ]);
     expect(resolveEmojiData).toHaveBeenCalledTimes(1);
   });

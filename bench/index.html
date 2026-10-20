@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>frimousse bench</title>
+    <style>
+      body { margin: 0; font: 14px system-ui, sans-serif; background: #111; color: #eee; }
+      #open { position: fixed; top: 8px; left: 8px; }
+      .picker { position: fixed; top: 48px; left: 8px; height: 400px; width: fit-content; display: flex; flex-direction: column; background: #1c1c1c; border-radius: 6px; overflow: hidden; isolation: isolate; }
+      .picker input { height: 36px; border: 0; border-bottom: 1px solid #333; background: transparent; color: inherit; padding: 0 12px; }
+      .viewport { position: relative; flex: 1; outline: none; }
+      .loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+      .row { padding: 0 4px; scroll-margin: 4px 0; }
+      .header { background: #1c1c1c; padding: 14px 12px 8px; font-size: 12px; line-height: 1; color: #999; }
+      .emoji { position: relative; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent; font-size: 18px; overflow: hidden; cursor: pointer; padding: 0; color: inherit; }
+      .emoji[data-active] { background: #333; }
+      .emoji::after { content: var(--emoji); position: absolute; inset: 0; z-index: -1; display: flex; align-items: center; justify-content: center; font-size: 2.5em; filter: blur(16px) saturate(2); scale: 0.9; opacity: 0; }
+      .emoji[data-active]::after { scale: 1; opacity: 0.5; transition: scale 180ms; }
+    </style>
+  </head>
+  <body>
+    <button id="open" type="button">Open</button>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

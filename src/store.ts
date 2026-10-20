@@ -9,7 +9,12 @@ import type {
 } from "./types";
 import { createStore, createStoreContext } from "./utils/store";
 
-const VIEWPORT_OVERSCAN = 2;
+// Rows rendered beyond each edge of the viewport.
+const VIEWPORT_OVERSCAN_ROWS = 1;
+
+// Scrolling can paint a frame or two before the picker re-renders for it,
+// so rows ahead of the scroll direction cover that many frames of movement.
+const SCROLL_LEAD_FRAMES = 2;
 
 const EMOJI_KEY_IGNORED_CHARACTERS = /[\uFE0E\uFE0F\u{1F3FB}-\u{1F3FF}]/gu;
 
@@ -71,6 +76,7 @@ export function createEmojiPickerStore(
 ) {
   let viewportScrollY = 0;
   let dataSearch: string | undefined;
+  let viewportScrollDelta = 0;
 
   return createStore<EmojiPickerStore>((set, get) => ({
     locale: initialLocale,
@@ -145,16 +151,24 @@ export function createEmojiPickerStore(
         data.categories.length * categoryHeaderHeight +
         data.rows.length * rowHeight;
 
-      const overscanStart = Math.floor((VIEWPORT_OVERSCAN * rowHeight) / 2);
-      const overscanEnd = Math.ceil((VIEWPORT_OVERSCAN * rowHeight) / 2);
+      const scrollLead = Math.min(
+        Math.abs(viewportScrollDelta) * SCROLL_LEAD_FRAMES,
+        viewportHeight,
+      );
+      const overscanStart =
+        VIEWPORT_OVERSCAN_ROWS * rowHeight +
+        (viewportScrollDelta < 0 ? scrollLead : 0);
+      const overscanEnd =
+        VIEWPORT_OVERSCAN_ROWS * rowHeight +
+        (viewportScrollDelta > 0 ? scrollLead : 0);
 
       // Adjust the scroll position to account for previous category headers
+      const rowsScrollY = viewportScrollY - previousCategoryHeadersHeight;
       const viewportStartY = Math.min(
-        viewportScrollY - previousCategoryHeadersHeight - overscanStart,
+        rowsScrollY - overscanStart,
         totalHeight - viewportHeight,
       );
-
-      const viewportEndY = viewportStartY + viewportHeight + overscanEnd;
+      const viewportEndY = rowsScrollY + viewportHeight + overscanEnd;
 
       const viewportStartRowIndex = Math.max(
         0,
@@ -314,6 +328,7 @@ export function createEmojiPickerStore(
       get().updateViewportState({ viewportWidth, viewportHeight });
     },
     onViewportScroll: (scrollY: number) => {
+      viewportScrollDelta = scrollY - viewportScrollY;
       viewportScrollY = scrollY;
 
       get().updateViewportState();

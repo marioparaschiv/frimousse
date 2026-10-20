@@ -4,11 +4,16 @@ import {
   useCallback,
   useContext,
   useDebugValue,
-  useEffect,
+  useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 
-// A tiny store with batched updates, context support, and selectors.
+// A tiny synchronous store with context support and selectors.
+//
+// Updates are applied and published immediately, so React renders them in the
+// same frame (layout effects and scroll handlers included) instead of a frame
+// later.
 
 export type Store<T> = {
   get: () => T;
@@ -20,36 +25,32 @@ export function createStore<T extends object>(
   createInitialState: (set: Store<T>["set"], get: Store<T>["get"]) => T,
 ): Store<T> {
   let state = {} as T;
-  let pending: T | null = null;
-  let frameId: number | null = null;
   const subscribers = new Set<(store: T) => void>();
 
-  const flush = () => {
-    if (pending) {
-      state = pending;
-      pending = null;
+  const get = () => state;
 
-      for (const subscriber of subscribers) {
-        subscriber(state);
+  const set: Store<T>["set"] = (partial) => {
+    const changes =
+      typeof partial === "function"
+        ? (partial as (state: T) => Partial<T>)(state)
+        : partial;
+    let hasChanged = false;
+
+    for (const key in changes) {
+      if (!Object.is(state[key as keyof T], changes[key as keyof T])) {
+        hasChanged = true;
+        break;
       }
     }
 
-    frameId = null;
-  };
+    if (!hasChanged) {
+      return;
+    }
 
-  const get = () => pending ?? state;
+    state = { ...state, ...changes };
 
-  const set: Store<T>["set"] = (partial) => {
-    pending ??= state;
-    Object.assign(
-      pending as T,
-      typeof partial === "function"
-        ? (partial as (state: T) => Partial<T>)(get())
-        : partial,
-    );
-
-    if (!frameId) {
-      frameId = requestAnimationFrame(flush);
+    for (const subscriber of subscribers) {
+      subscriber(state);
     }
   };
 
@@ -98,17 +99,32 @@ export function useSelector<T, S>(
   selector: (state: T) => S,
   compare: (a: S, b: S) => boolean = Object.is,
 ) {
-  const [slice, setSlice] = useState(() => selector(store.get()));
+  const cache = useRef<{ state: T; selector: typeof selector; slice: S }>(null);
 
-  useEffect(() => {
-    return store.subscribe(() => {
-      const nextSlice = selector(store.get());
+  // The snapshot only changes identity when the compared slice changes,
+  // which is what lets useSyncExternalStore bail out of re-renders.
+  const getSnapshot = () => {
+    const state = store.get();
+    const cached = cache.current;
 
-      setSlice((previousSlice) =>
-        compare(previousSlice, nextSlice) ? previousSlice : nextSlice,
-      );
-    });
-  }, [store, selector, compare]);
+    if (cached?.state === state && cached.selector === selector) {
+      return cached.slice;
+    }
+
+    const slice = selector(state);
+
+    if (cached && compare(cached.slice, slice)) {
+      cache.current = { state, selector, slice: cached.slice };
+
+      return cached.slice;
+    }
+
+    cache.current = { state, selector, slice };
+
+    return slice;
+  };
+
+  const slice = useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot);
 
   useDebugValue(slice);
 

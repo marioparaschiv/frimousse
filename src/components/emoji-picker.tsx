@@ -18,8 +18,15 @@ import {
   useState,
 } from "react";
 import { EMOJI_FONT_FAMILY } from "../constants";
-import { defaultEmojiDataResolver, validateSkinTone } from "../data/emoji";
-import { resolveCustomEmojiData } from "../data/emoji-data-store";
+import {
+  defaultEmojiDataResolver,
+  getLoadedDefaultEmojiData,
+  validateSkinTone,
+} from "../data/emoji";
+import {
+  getCachedEmojiData,
+  resolveCustomEmojiData,
+} from "../data/emoji-data-store";
 import {
   getCustomEmojiPickerSections,
   getEmojiPickerData,
@@ -82,13 +89,22 @@ function EmojiPickerDataHandler({
   EmojiPickerRootProps,
   "emojiVersion" | "emojibaseUrl" | "resolveEmojiData"
 >) {
-  const [emojiData, setEmojiData] = useState<EmojiData | undefined>(undefined);
   const store = useEmojiPickerStore();
   const locale = useSelectorKey(store, "locale");
   const columns = useSelectorKey(store, "columns");
   const skinTone = useSelectorKey(store, "skinTone");
   const search = useSelectorKey(store, "search");
   const categories = useSelectorKey(store, "categories");
+  // Data already in memory renders with the picker's first frame.
+  const [emojiData, setEmojiData] = useState<EmojiData | undefined>(() =>
+    resolveEmojiData === defaultEmojiDataResolver
+      ? getLoadedDefaultEmojiData(locale, { emojiVersion, emojibaseUrl })
+      : getCachedEmojiData(locale, {
+          emojiVersion,
+          emojibaseUrl,
+          resolveEmojiData,
+        }),
+  );
   // Inline resolvers shouldn't reload data on every render.
   const stableResolveEmojiData = useStableCallback(
     (locale: Locale, options: EmojiDataResolverOptions) =>

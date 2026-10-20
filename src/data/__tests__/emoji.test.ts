@@ -102,13 +102,10 @@ describe("defaultEmojiDataResolver", () => {
     await defaultEmojiDataResolver("en", { emojibaseUrl });
 
     expect(fetchSpy.mock.calls).toEqual([
-      [
-        `${emojibaseUrl}/en/data.json`,
-        { method: "HEAD", signal: expect.any(AbortSignal) },
-      ],
+      [`${emojibaseUrl}/en/data.json`, { method: "HEAD", signal: undefined }],
       [
         `${emojibaseUrl}/en/messages.json`,
-        { method: "HEAD", signal: expect.any(AbortSignal) },
+        { method: "HEAD", signal: undefined },
       ],
     ]);
   });
@@ -130,28 +127,28 @@ describe("defaultEmojiDataResolver", () => {
     expect(Math.max(...data.emojis.map((emoji) => emoji.version))).toBe(to);
   });
 
-  it.each([undefined, 5])(
-    "should apply version changes to cached data from a fixed source (initial version: %s)",
-    async (emojiVersion) => {
-      const emojibaseUrl = "https://example.com/self-hosted-emojibase-data";
-      await defaultEmojiDataResolver("en", { emojibaseUrl, emojiVersion });
-      const fetchSpy = vi.spyOn(globalThis, "fetch");
+  it.each([
+    undefined,
+    5,
+  ])("should apply version changes to cached data from a fixed source (initial version: %s)", async (emojiVersion) => {
+    const emojibaseUrl = "https://example.com/self-hosted-emojibase-data";
+    await defaultEmojiDataResolver("en", { emojibaseUrl, emojiVersion });
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
 
-      for (const version of [5, 12, 12.1, 16, undefined]) {
-        const data = await defaultEmojiDataResolver("en", {
-          emojibaseUrl,
-          emojiVersion: version,
-        });
+    for (const version of [5, 12, 12.1, 16, undefined]) {
+      const data = await defaultEmojiDataResolver("en", {
+        emojibaseUrl,
+        emojiVersion: version,
+      });
 
-        expect(data.emojis.length).toBeGreaterThan(0);
-        expect(Math.max(...data.emojis.map((emoji) => emoji.version))).toBe(
-          version ?? 16,
-        );
-      }
+      expect(data.emojis.length).toBeGreaterThan(0);
+      expect(Math.max(...data.emojis.map((emoji) => emoji.version))).toBe(
+        version ?? 16,
+      );
+    }
 
-      expect(fetchSpy).not.toHaveBeenCalled();
-    },
-  );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 
   it("should fall back to the default locale when the locale isn't supported by Emojibase", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -188,11 +185,11 @@ describe("defaultEmojiDataResolver", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(fetchSpy.mock.calls[0]).toEqual([
       "https://cdn.jsdelivr.net/npm/emojibase-data@latest/en/data.json",
-      { method: "HEAD", signal: expect.any(AbortSignal) },
+      { method: "HEAD", signal: undefined },
     ]);
     expect(fetchSpy.mock.calls[1]).toEqual([
       "https://cdn.jsdelivr.net/npm/emojibase-data@latest/en/messages.json",
-      { method: "HEAD", signal: expect.any(AbortSignal) },
+      { method: "HEAD", signal: undefined },
     ]);
   });
 
