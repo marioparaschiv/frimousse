@@ -111,28 +111,31 @@ describe("createStore", () => {
     expect(subscriber).toHaveBeenCalledTimes(1);
   });
 
-  it("should batch updates within the same frame", () => {
+  it("should notify subscribers synchronously on each update", () => {
     const store = createStore(() => ({ id: "123", count: 0 }));
     const subscriber = vi.fn();
     store.subscribe(subscriber);
 
     store.set({ count: 1 });
 
-    // The state is updated immediately, but subscribers are not called yet
-    expect(store.get()).toEqual({ id: "123", count: 1 });
-    expect(subscriber).not.toHaveBeenCalled();
+    expect(subscriber).toHaveBeenCalledTimes(1);
+    expect(subscriber).toHaveBeenLastCalledWith({ id: "123", count: 1 });
 
     store.set({ id: "456" });
 
-    // The state is updated immediately, but subscribers are not called yet
-    expect(store.get()).toEqual({ id: "456", count: 1 });
+    expect(subscriber).toHaveBeenCalledTimes(2);
+    expect(subscriber).toHaveBeenLastCalledWith({ id: "456", count: 1 });
+  });
+
+  it("should not notify subscribers when nothing changes", () => {
+    const store = createStore(() => ({ id: "123", count: 0 }));
+    const subscriber = vi.fn();
+    store.subscribe(subscriber);
+
+    store.set({ count: 0 });
+    store.set((state) => ({ id: state.id }));
+
     expect(subscriber).not.toHaveBeenCalled();
-
-    vi.advanceTimersToNextFrame();
-
-    // Subscribers are called after the frame with the latest state
-    expect(subscriber).toHaveBeenCalledTimes(1);
-    expect(subscriber).toHaveBeenCalledWith({ id: "456", count: 1 });
   });
 
   it("should always return the latest state with get", () => {
