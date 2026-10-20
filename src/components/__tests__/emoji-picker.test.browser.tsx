@@ -649,14 +649,15 @@ describe("EmojiPicker.Viewport", () => {
 
     await page.getByTestId("scroll-viewport").click();
 
+    // Five overscan rows render above the viewport.
     await expect
-      .element(page.getByRole("row").nth(5))
+      .element(page.getByRole("row").nth(9))
       .toHaveAttribute("aria-rowindex", "20");
 
     await page.getByTestId("scroll-viewport").click();
 
     await expect
-      .element(page.getByRole("row").nth(5))
+      .element(page.getByRole("row").nth(9))
       .toHaveAttribute("aria-rowindex", "38");
   });
 });
