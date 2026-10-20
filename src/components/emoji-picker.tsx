@@ -18,8 +18,15 @@ import {
   useState,
 } from "react";
 import { EMOJI_FONT_FAMILY } from "../constants";
-import { defaultEmojiDataResolver, validateSkinTone } from "../data/emoji";
-import { resolveCustomEmojiData } from "../data/emoji-data-store";
+import {
+  defaultEmojiDataResolver,
+  getLoadedDefaultEmojiData,
+  validateSkinTone,
+} from "../data/emoji";
+import {
+  getCachedEmojiData,
+  resolveCustomEmojiData,
+} from "../data/emoji-data-store";
 import { getEmojiPickerData } from "../data/emoji-picker";
 import { useActiveEmoji, useSkinTone } from "../hooks";
 import {
@@ -61,7 +68,6 @@ import type {
 } from "../types";
 import { shallow } from "../utils/compare";
 import { noop } from "../utils/noop";
-import { requestIdleCallback } from "../utils/request-idle-callback";
 import { useCreateStore, useSelector, useSelectorKey } from "../utils/store";
 import { useLayoutEffect } from "../utils/use-layout-effect";
 import { useStableCallback } from "../utils/use-stable-callback";
@@ -74,12 +80,21 @@ function EmojiPickerDataHandler({
   EmojiPickerRootProps,
   "emojiVersion" | "emojibaseUrl" | "resolveEmojiData"
 >) {
-  const [emojiData, setEmojiData] = useState<EmojiData | undefined>(undefined);
   const store = useEmojiPickerStore();
   const locale = useSelectorKey(store, "locale");
   const columns = useSelectorKey(store, "columns");
   const skinTone = useSelectorKey(store, "skinTone");
   const search = useSelectorKey(store, "search");
+  // Data already in memory renders with the picker's first frame.
+  const [emojiData, setEmojiData] = useState<EmojiData | undefined>(() =>
+    resolveEmojiData === defaultEmojiDataResolver
+      ? getLoadedDefaultEmojiData(locale, { emojiVersion, emojibaseUrl })
+      : getCachedEmojiData(locale, {
+          emojiVersion,
+          emojibaseUrl,
+          resolveEmojiData,
+        }),
+  );
   // Inline resolvers shouldn't reload data on every render.
   const stableResolveEmojiData = useStableCallback(
     (locale: Locale, options: EmojiDataResolverOptions) =>
@@ -112,22 +127,19 @@ function EmojiPickerDataHandler({
     };
   }, [emojiVersion, emojibaseUrl, locale, stableResolveEmojiData]);
 
-  useEffect(() => {
-    if (!emojiData) {
-      return;
-    }
+  const data = useMemo(
+    () =>
+      emojiData
+        ? getEmojiPickerData(emojiData, columns, skinTone, search)
+        : undefined,
+    [emojiData, columns, skinTone, search],
+  );
 
-    return requestIdleCallback(
-      () => {
-        store
-          .get()
-          .onDataChange(
-            getEmojiPickerData(emojiData, columns, skinTone, search),
-          );
-      },
-      { timeout: 100 },
-    );
-  }, [emojiData, columns, skinTone, search]);
+  useLayoutEffect(() => {
+    if (data) {
+      store.get().onDataChange(data);
+    }
+  }, [data]);
 
   return null;
 }

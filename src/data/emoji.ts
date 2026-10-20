@@ -7,6 +7,8 @@ import type {
   EmojiData,
   EmojiDataEmoji,
   EmojiDataResolver,
+  EmojiDataResolverOptions,
+  Locale,
   SkinTone,
 } from "../types";
 import { capitalize } from "../utils/capitalize";
@@ -367,50 +369,153 @@ async function readEmojiData(
   const sessionMetadata = getSessionMetadata(baseUrl);
   const cached = createEmojibaseCache(baseUrl).get(locale);
 
-  let data: EmojiData;
+  // Data without ETags can't be revalidated later, so it's replaced now.
+  if (!cached?.metadata?.emojisEtag || !cached.metadata.messagesEtag) {
+    const data = await fetchEmojiData(baseUrl, locale, signal);
+    markRevalidated(baseUrl, locale);
 
-  if (!cached) {
-    // No cached data
-    data = await fetchEmojiData(baseUrl, locale, signal);
-  } else if (sessionMetadata?.revalidated.includes(locale)) {
-    // Check ETags only once per locale per session
-    data = cached.data;
-  } else {
-    // Check ETags to see if the cached data is up-to-date,
-    // but if that fails, the possibly-stale cached data is used
-    try {
-      const { emojisEtag, messagesEtag } = await fetchEmojibaseEtags(
-        baseUrl,
-        locale,
-        signal,
-      );
-      signal.throwIfAborted();
-
-      data =
-        !emojisEtag ||
-        !messagesEtag ||
-        emojisEtag !== cached.metadata?.emojisEtag ||
-        messagesEtag !== cached.metadata?.messagesEtag
-          ? await fetchEmojiData(baseUrl, locale, signal)
-          : cached.data;
-    } catch {
-      signal.throwIfAborted();
-      data = cached.data;
-    }
+    return data;
   }
 
-  signal.throwIfAborted();
+  // Check ETags only once per locale per session, after serving the cached
+  // data: a stale dataset is replaced for the next picker rather than delaying this one.
+  if (!sessionMetadata?.revalidated.includes(locale)) {
+    markRevalidated(baseUrl, locale);
+    void revalidateEmojiData(baseUrl, locale, cached.metadata);
+  }
+
+  return cached.data;
+}
+
+async function revalidateEmojiData(
+  baseUrl: string,
+  locale: EmojibaseLocale,
+  metadata: EmojibaseMetadata | undefined,
+) {
+  try {
+    const { emojisEtag, messagesEtag } = await fetchEmojibaseEtags(
+      baseUrl,
+      locale,
+    );
+
+    if (
+      emojisEtag &&
+      messagesEtag &&
+      emojisEtag === metadata?.emojisEtag &&
+      messagesEtag === metadata?.messagesEtag
+    ) {
+      return;
+    }
+
+    setCachedEmojiData(
+      locale,
+      { emojibaseUrl: baseUrl },
+      await fetchEmojiData(baseUrl, locale),
+    );
+  } catch {
+    // The possibly-stale cached data stays in use.
+  }
+}
+
+function markRevalidated(baseUrl: string, locale: EmojibaseLocale) {
   const metadata = getSessionMetadata(baseUrl);
   const revalidated = metadata?.revalidated ?? [];
 
+  if (!revalidated.includes(locale)) {
+    setSessionMetadata(baseUrl, {
+      ...metadata,
+      revalidated: [...revalidated, locale],
+    });
+  }
+}
+
+const supportedEmojiData = new WeakMap<EmojiData, Map<string, EmojiData>>();
+
+// Memoized so repeated resolutions return the same object and pickers can skip rebuilding their rows.
+function filterSupportedEmojis(
+  data: EmojiData,
+  locale: EmojibaseLocale,
+  emojiVersion: number,
+  countryFlags: boolean,
+): EmojiData {
+  let filtered = supportedEmojiData.get(data);
+
+  if (!filtered) {
+    filtered = new Map();
+    supportedEmojiData.set(data, filtered);
+  }
+
+  const key = `${locale}:${emojiVersion}:${countryFlags}`;
+  let result = filtered.get(key);
+
+  if (!result) {
+    result = {
+      locale,
+      emojis: data.emojis.filter(
+        (emoji) =>
+          emoji.version <= emojiVersion && (!emoji.countryFlag || countryFlags),
+      ),
+      categories: data.categories,
+      skinTones: data.skinTones,
+    };
+    filtered.set(key, result);
+  }
+
+  return result;
+}
+
+function getEmojiSupportForSession(
+  baseUrl: string,
+  data: EmojiData,
+): EmojiSupport {
+  const sessionMetadata = getSessionMetadata(baseUrl);
+
+  if (
+    sessionMetadata?.emojiVersion !== undefined &&
+    sessionMetadata.countryFlags !== undefined
+  ) {
+    return {
+      emojiVersion: sessionMetadata.emojiVersion,
+      countryFlags: sessionMetadata.countryFlags,
+    };
+  }
+
+  const support = getEmojiSupport(data.emojis);
+
   setSessionMetadata(baseUrl, {
-    ...metadata,
-    revalidated: revalidated.includes(locale)
-      ? revalidated
-      : [...revalidated, locale],
+    ...support,
+    revalidated: sessionMetadata?.revalidated ?? [],
   });
 
-  return data;
+  return support;
+}
+
+/**
+ * Returns what `defaultEmojiDataResolver` would resolve to when it is already
+ * loaded in memory, so a picker can render it without waiting.
+ */
+export function getLoadedDefaultEmojiData(
+  locale: Locale,
+  { emojiVersion, emojibaseUrl }: EmojiDataResolverOptions = {},
+): EmojiData | undefined {
+  const emojibaseLocale =
+    EMOJIBASE_LOCALES.find((supported) => supported === locale) ??
+    EMOJIBASE_DEFAULT_LOCALE;
+  const baseUrl = getEmojibaseUrl({ emojiVersion, emojibaseUrl });
+  const data = getCachedEmojiData(emojibaseLocale, { emojibaseUrl: baseUrl });
+
+  if (!data) {
+    return undefined;
+  }
+
+  const support = getEmojiSupportForSession(baseUrl, data);
+
+  return filterSupportedEmojis(
+    data,
+    emojibaseLocale,
+    emojiVersion ?? support.emojiVersion,
+    support.countryFlags,
+  );
 }
 
 /**
@@ -425,37 +530,14 @@ export const defaultEmojiDataResolver: EmojiDataResolver = async (
   const baseUrl = getEmojibaseUrl({ emojiVersion, emojibaseUrl });
   const data = await loadEmojiData(baseUrl, emojibaseLocale, signal);
   signal?.throwIfAborted();
-  const sessionMetadata = getSessionMetadata(baseUrl);
-  const support: EmojiSupport =
-    sessionMetadata?.emojiVersion !== undefined &&
-    sessionMetadata.countryFlags !== undefined
-      ? {
-          emojiVersion: sessionMetadata.emojiVersion,
-          countryFlags: sessionMetadata.countryFlags,
-        }
-      : getEmojiSupport(data.emojis);
+  const support = getEmojiSupportForSession(baseUrl, data);
 
-  setSessionMetadata(baseUrl, {
-    ...support,
-    revalidated: sessionMetadata?.revalidated ?? [emojibaseLocale],
-  });
-
-  // Filter out unsupported emojis
-  const filteredEmojis = data.emojis.filter((emoji) => {
-    const isSupportedVersion =
-      emoji.version <= (emojiVersion ?? support.emojiVersion);
-
-    return emoji.countryFlag
-      ? isSupportedVersion && support.countryFlags
-      : isSupportedVersion;
-  });
-
-  return {
-    locale: emojibaseLocale,
-    emojis: filteredEmojis,
-    categories: data.categories,
-    skinTones: data.skinTones,
-  };
+  return filterSupportedEmojis(
+    data,
+    emojibaseLocale,
+    emojiVersion ?? support.emojiVersion,
+    support.countryFlags,
+  );
 };
 
 export function validateLocale(locale: string): EmojibaseLocale {
