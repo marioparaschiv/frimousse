@@ -25,6 +25,25 @@ import * as EmojiPicker from "../emoji-picker";
 
 const EMOJI_BUTTON_HEIGHT = 28;
 
+// Rows past the viewport mount in idle time; waits until they stop changing.
+async function waitForRowsToSettle() {
+  let previous = -1;
+
+  await expect
+    .poll(
+      () => {
+        const count = document.querySelectorAll("[frimousse-row]").length;
+        const settled = count === previous;
+
+        previous = count;
+
+        return settled;
+      },
+      { interval: 100 },
+    )
+    .toBe(true);
+}
+
 function getEmojiText(emoji: Emoji) {
   return emoji.type === "native" ? emoji.emoji : emoji.id;
 }
@@ -670,22 +689,22 @@ describe("EmojiPicker.Viewport", () => {
 
     await expect.element(page.getByText("😀")).toBeInTheDocument();
 
+    // Rows in view render first, and rows past them follow in idle time.
     await expect.element(page.getByRole("row").nth(10)).toBeInTheDocument();
-    await expect.element(page.getByRole("row").nth(20)).not.toBeInTheDocument();
+    await waitForRowsToSettle();
+    await expect.element(page.getByRole("row").nth(60)).toBeInTheDocument();
 
     await page.getByTestId("viewport-height").fill("500");
     await page.getByTestId("row-height").fill("20");
     await page.getByTestId("category-header-height").fill("20");
 
-    await expect.element(page.getByRole("row").nth(10)).toBeInTheDocument();
-    await expect.element(page.getByRole("row").nth(20)).toBeInTheDocument();
+    await expect.element(page.getByRole("row").nth(24)).toBeInTheDocument();
 
     await page.getByTestId("viewport-height").fill("200");
     await page.getByTestId("row-height").fill("100");
     await page.getByTestId("category-header-height").fill("400");
 
-    await expect.element(page.getByRole("row").nth(10)).not.toBeInTheDocument();
-    await expect.element(page.getByRole("row").nth(20)).not.toBeInTheDocument();
+    await expect.element(page.getByRole("row").nth(40)).toBeInTheDocument();
   });
 
   it.each([
@@ -717,23 +736,32 @@ describe("EmojiPicker.Viewport", () => {
 
     page.render(<Page />);
 
+    // The row under the middle of the viewport, as the user sees it.
+    const rowInView = () => {
+      const viewport = document.querySelector("[data-testid='viewport']")!;
+      const { left, top, width, height } = viewport.getBoundingClientRect();
+
+      return Number(
+        document
+          .elementFromPoint(left + width / 2, top + height / 2)
+          ?.closest("[frimousse-row]")
+          ?.getAttribute("aria-rowindex") ?? -1,
+      );
+    };
+
     await expect
       .element(page.getByRole("row").nth(5))
       .toHaveAttribute("aria-rowindex", "5");
-    await expect.element(page.getByRole("row").nth(20)).not.toBeInTheDocument();
 
     await page.getByTestId("scroll-viewport").click();
-
-    // Five overscan rows render above the viewport.
-    await expect
-      .element(page.getByRole("row").nth(9))
-      .toHaveAttribute("aria-rowindex", "20");
+    await expect.poll(rowInView).toBeGreaterThan(15);
 
     await page.getByTestId("scroll-viewport").click();
+    await expect.poll(rowInView).toBeGreaterThan(30);
 
-    await expect
-      .element(page.getByRole("row").nth(9))
-      .toHaveAttribute("aria-rowindex", "38");
+    document.querySelector("[data-testid='viewport']")!.scrollTop = 1e6;
+
+    await expect.poll(rowInView).toBeGreaterThan(100);
   });
 });
 
@@ -773,8 +801,8 @@ describe("EmojiPicker.List", () => {
       .element(page.getByRole("row").nth(10))
       .toHaveAccessibleName("Custom row");
     await expect
-      .element(page.getByTestId("custom-category-header: Activities"))
-      .toHaveTextContent("Custom (Activities)");
+      .element(page.getByTestId("custom-category-header: Smileys & emotion"))
+      .toHaveTextContent("Custom (Smileys & emotion)");
   });
 });
 
@@ -1225,8 +1253,7 @@ describe("EmojiPicker with custom categories", () => {
     await expect
       .element(page.getByRole("row").nth(10))
       .toHaveAttribute("aria-rowindex", "10");
-    await nextFrame();
-    await nextFrame();
+    await waitForRowsToSettle();
 
     renders.length = 0;
 
@@ -1265,10 +1292,7 @@ describe("EmojiPicker with custom categories", () => {
     await nextFrame();
     await nextFrame();
 
-    expect(renders.sort()).toEqual([
-      "emoji Party parrot",
-      "row 0",
-    ]);
+    expect(renders.sort()).toEqual(["emoji Party parrot", "row 0"]);
     expect(resolveEmojiData).toHaveBeenCalledTimes(1);
   });
 

@@ -35,7 +35,6 @@ import {
 import { useActiveEmoji, useSkinTone } from "../hooks";
 import {
   $activeEmoji,
-  $activeEmojiKey,
   $categoriesCount,
   $categoriesRowsStartIndices,
   $isEmpty,
@@ -77,7 +76,12 @@ import type {
 } from "../types";
 import { shallow } from "../utils/compare";
 import { noop } from "../utils/noop";
-import { useCreateStore, useSelector, useSelectorKey } from "../utils/store";
+import {
+  type Store,
+  useCreateStore,
+  useSelector,
+  useSelectorKey,
+} from "../utils/store";
 import { useLayoutEffect } from "../utils/use-layout-effect";
 import { useStableCallback } from "../utils/use-stable-callback";
 
@@ -919,97 +923,135 @@ function preventDefault(event: ReactSyntheticEvent) {
   event.preventDefault();
 }
 
-type ListEmojiProps = {
-  emoji: EmojiPickerEmoji;
-  emojiKey: string;
-  columnIndex: number;
-  rowIndex: number;
-} & Pick<EmojiPickerListComponents, "Emoji">;
+type ListEmojiHandlers = Pick<
+  EmojiPickerListEmojiProps,
+  | "onClick"
+  | "onContextMenu"
+  | "onPointerDown"
+  | "onPointerEnter"
+  | "onPointerLeave"
+>;
 
-// Rebuilt emojis are new objects, so they are compared by value
-function sameListEmojiProps(a: ListEmojiProps, b: ListEmojiProps) {
-  return (
-    a.Emoji === b.Emoji &&
-    a.emojiKey === b.emojiKey &&
-    a.columnIndex === b.columnIndex &&
-    a.rowIndex === b.rowIndex &&
-    sameEmojiPickerEmoji(a.emoji, b.emoji)
-  );
-}
-
-const EmojiPickerListEmoji = memo(
-  ({ Emoji, emoji, emojiKey, columnIndex, rowIndex }: ListEmojiProps) => {
-    const store = useEmojiPickerStore();
-    const isActive = useSelector(
-      store,
-      (state) => $activeEmojiKey(state) === emojiKey,
+// Shared by every emoji: each finds its own position from the DOM, so rows
+// render no per-emoji closures while scrolling.
+function createListEmojiHandlers(store: Store<EmojiPickerStore>) {
+  function locate(target: Element) {
+    const rowIndex = Number(
+      target.closest("[frimousse-row]")?.getAttribute("aria-rowindex"),
     );
+    const columnIndex = Number(target.getAttribute("aria-colindex"));
+    const emoji = store.get().data?.rows[rowIndex]?.emojis[columnIndex];
 
-    const handleSelect = useCallback(() => {
-      store.get().onEmojiSelect(emoji);
-    }, [emoji]);
+    return emoji && { emoji, rowIndex, columnIndex };
+  }
 
-    const handleContextMenu = useCallback(
-      (event: ReactMouseEvent<HTMLButtonElement>) => {
-        store.get().onEmojiContextMenu(emoji, event.nativeEvent);
-      },
-      [emoji],
-    );
+  return {
+    onClick: (event: ReactMouseEvent<HTMLButtonElement>) => {
+      const located = locate(event.currentTarget);
 
-    const handlePointerEnter = useCallback(() => {
-      store.get().onActiveEmojiChange("pointer", columnIndex, rowIndex);
-    }, [columnIndex, rowIndex]);
+      if (located) {
+        store.get().onEmojiSelect(located.emoji);
+      }
+    },
+    onContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => {
+      const located = locate(event.currentTarget);
 
-    const handlePointerLeave = useCallback(() => {
+      if (located) {
+        store.get().onEmojiContextMenu(located.emoji, event.nativeEvent);
+      }
+    },
+    onPointerDown: preventDefault,
+    onPointerEnter: (event: ReactMouseEvent<HTMLButtonElement>) => {
+      const located = locate(event.currentTarget);
+
+      if (located) {
+        store
+          .get()
+          .onActiveEmojiChange(
+            "pointer",
+            located.columnIndex,
+            located.rowIndex,
+          );
+      }
+    },
+    onPointerLeave: () => {
       store.get().onActiveEmojiReset();
-    }, []);
-
-    return (
-      <Emoji
-        {...listEmojiProps(emoji, columnIndex, isActive)}
-        onClick={handleSelect}
-        onContextMenu={handleContextMenu}
-        onPointerDown={preventDefault}
-        onPointerEnter={handlePointerEnter}
-        onPointerLeave={handlePointerLeave}
-      />
-    );
-  },
-  sameListEmojiProps,
-);
+    },
+  } satisfies ListEmojiHandlers;
+}
 
 type ListRowProps = {
   row: EmojiPickerDataRow;
   rowIndex: number;
+  handlers: ListEmojiHandlers;
 } & Pick<EmojiPickerListComponents, "Emoji" | "Row">;
 
 function sameListRowProps(a: ListRowProps, b: ListRowProps) {
   return (
     a.Row === b.Row &&
     a.Emoji === b.Emoji &&
+    a.handlers === b.handlers &&
     a.rowIndex === b.rowIndex &&
     sameEmojiPickerRow(a.row, b.row)
   );
 }
 
+// The active column of this row, or -1. One subscription per row rather
+// than per emoji keeps store updates cheap while scrolling.
+function $activeColumnInRow(state: EmojiPickerStore, rowIndex: number) {
+  return state.interaction !== "none" && state.activeRowIndex === rowIndex
+    ? state.activeColumnIndex
+    : -1;
+}
+
+type ListEmojiProps = {
+  emoji: EmojiPickerEmoji;
+  columnIndex: number;
+  isActive: boolean;
+  handlers: ListEmojiHandlers;
+} & Pick<EmojiPickerListComponents, "Emoji">;
+
+// Rebuilt emojis are new objects, so they are compared by value
+function sameListEmojiProps(a: ListEmojiProps, b: ListEmojiProps) {
+  return (
+    a.Emoji === b.Emoji &&
+    a.handlers === b.handlers &&
+    a.columnIndex === b.columnIndex &&
+    a.isActive === b.isActive &&
+    sameEmojiPickerEmoji(a.emoji, b.emoji)
+  );
+}
+
+const EmojiPickerListEmoji = memo(
+  ({ Emoji, emoji, columnIndex, isActive, handlers }: ListEmojiProps) => (
+    <Emoji {...listEmojiProps(emoji, columnIndex, isActive)} {...handlers} />
+  ),
+  sameListEmojiProps,
+);
+
 const EmojiPickerListRow = memo(
-  ({ Row, Emoji, row, rowIndex }: ListRowProps) => {
+  ({ Row, Emoji, row, rowIndex, handlers }: ListRowProps) => {
+    const store = useEmojiPickerStore();
+    const activeColumnIndex = useSelector(
+      store,
+      useCallback(
+        (state: EmojiPickerStore) => $activeColumnInRow(state, rowIndex),
+        [rowIndex],
+      ),
+    );
+
     return (
       <Row {...listRowProps(rowIndex)}>
-        {row.emojis.map((emoji, columnIndex) => {
-          const emojiKey = getEmojiPickerEmojiKey(row.categoryId, emoji);
-
-          return (
-            <EmojiPickerListEmoji
-              columnIndex={columnIndex}
-              Emoji={Emoji}
-              emoji={emoji}
-              emojiKey={emojiKey}
-              key={emojiKey}
-              rowIndex={rowIndex}
-            />
-          );
-        })}
+        {row.emojis.map((emoji, columnIndex) => (
+          <EmojiPickerListEmoji
+            columnIndex={columnIndex}
+            Emoji={Emoji}
+            emoji={emoji}
+            handlers={handlers}
+            isActive={columnIndex === activeColumnIndex}
+            key={getEmojiPickerEmojiKey(row.categoryId, emoji)}
+          />
+        ))}
       </Row>
     );
   },
@@ -1226,6 +1268,7 @@ const EmojiPickerList = forwardRef<HTMLDivElement, EmojiPickerListProps>(
       components?.CategoryHeader ?? DefaultEmojiPickerListCategoryHeader;
     const Emoji = components?.Emoji ?? DefaultEmojiPickerListEmoji;
     const Row = components?.Row ?? DefaultEmojiPickerListRow;
+    const handlers = useMemo(() => createListEmojiHandlers(store), []);
     const columns = useSelectorKey(store, "columns");
     const viewportStartRowIndex = useSelectorKey(
       store,
@@ -1247,6 +1290,12 @@ const EmojiPickerList = forwardRef<HTMLDivElement, EmojiPickerListProps>(
       );
     }, [categoriesRowsStartIndices, viewportStartRowIndex]);
     const categoriesCount = categoriesRowsStartIndices?.length ?? 0;
+    // Each sticky header is its own compositor layer, so only the categories
+    // the rendered rows belong to are mounted.
+    const viewportStartCategoryIndex =
+      rows?.[viewportStartRowIndex]?.categoryIndex ?? 0;
+    const viewportEndCategoryIndex =
+      rows?.[viewportEndRowIndex]?.categoryIndex ?? categoriesCount - 1;
 
     useImperativeHandle(forwardedRef, () => ref.current);
 
@@ -1307,6 +1356,7 @@ const EmojiPickerList = forwardRef<HTMLDivElement, EmojiPickerListProps>(
                   )}
                   <EmojiPickerListRow
                     Emoji={Emoji}
+                    handlers={handlers}
                     Row={Row}
                     row={row}
                     rowIndex={rowIndex}
@@ -1315,13 +1365,18 @@ const EmojiPickerList = forwardRef<HTMLDivElement, EmojiPickerListProps>(
               );
             },
           )}
-          {Array.from({ length: categoriesCount }, (_, index) => (
-            <EmojiPickerListCategory
-              CategoryHeader={CategoryHeader}
-              categoryIndex={index}
-              key={index}
-            />
-          ))}
+          {Array.from(
+            {
+              length: viewportEndCategoryIndex - viewportStartCategoryIndex + 1,
+            },
+            (_, index) => (
+              <EmojiPickerListCategory
+                CategoryHeader={CategoryHeader}
+                categoryIndex={viewportStartCategoryIndex + index}
+                key={viewportStartCategoryIndex + index}
+              />
+            ),
+          )}
         </div>
       </div>
     );
