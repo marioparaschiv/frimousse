@@ -9,10 +9,45 @@ import type {
 } from "./types";
 import { createStore, createStoreContext } from "./utils/store";
 
-// Rows rendered beyond each edge of the viewport. A fixed window keeps rows
-// mounted while scrolling; one that grows with scroll speed remounts rows on
-// every scroll event.
-const VIEWPORT_OVERSCAN_ROWS = 5;
+// Rows always rendered beyond each edge of the viewport. Scrolling past them
+// renders rows synchronously, in the frame that scrolled.
+const VIEWPORT_OVERSCAN_ROWS = 2;
+
+// Rows rendered beyond each edge of the viewport in idle time, a few at a
+// time, so scrolling through them changes no DOM. It covers every built-in
+// emoji, so once filled, scrolling never renders.
+const VIEWPORT_BUFFER_ROWS = 250;
+
+// Rows added or dropped at each edge per idle task.
+const VIEWPORT_FILL_ROWS = 1;
+
+// Idle time an idle task leaves unused, in ms, so the next frame isn't late.
+const VIEWPORT_FILL_RESERVE_MS = 4;
+
+const requestIdle: (callback: (deadline?: IdleDeadline) => void) => unknown =
+  typeof requestIdleCallback === "function"
+    ? (callback) => requestIdleCallback(callback, { timeout: 500 })
+    : (callback) => setTimeout(callback, 50);
+
+type RowRange = { start: number; end: number };
+
+function rowsAround(visible: RowRange, rows: number, lastRowIndex: number) {
+  return {
+    start: Math.max(0, visible.start - rows),
+    end: Math.min(lastRowIndex, visible.end + rows),
+  };
+}
+
+// Moves each edge of `rendered` up to `step` rows toward `target`.
+function stepToward(rendered: RowRange, target: RowRange, step: number) {
+  const move = (from: number, to: number) =>
+    from < to ? Math.min(to, from + step) : Math.max(to, from - step);
+
+  return {
+    start: move(rendered.start, target.start),
+    end: move(rendered.end, target.end),
+  };
+}
 
 const EMOJI_KEY_IGNORED_CHARACTERS = /[\uFE0E\uFE0F\u{1F3FB}-\u{1F3FF}]/gu;
 
@@ -74,8 +109,68 @@ export function createEmojiPickerStore(
 ) {
   let viewportScrollY = 0;
   let dataSearch: string | undefined;
+  let visibleRows: RowRange | undefined;
+  let isFillScheduled = false;
+  let isNewSearch = false;
 
-  return createStore<EmojiPickerStore>((set, get) => ({
+  // Moves the rendered rows a step toward the buffer; returns whether
+  // they're there.
+  function fillStep() {
+    const { data, viewportStartRowIndex, viewportEndRowIndex, viewportRef } =
+      store.get();
+
+    if (!data || !visibleRows || !viewportRef?.current?.isConnected) {
+      return true;
+    }
+
+    const target = rowsAround(
+      visibleRows,
+      VIEWPORT_BUFFER_ROWS,
+      data.rows.length - 1,
+    );
+    const next = stepToward(
+      { start: viewportStartRowIndex, end: viewportEndRowIndex },
+      target,
+      VIEWPORT_FILL_ROWS,
+    );
+
+    store.set({
+      viewportStartRowIndex: next.start,
+      viewportEndRowIndex: next.end,
+      viewportStartCategoryIndex: data.rows[next.start]?.categoryIndex,
+    });
+
+    // Style and lay out the new rows now, in idle time, rather than in the
+    // next frame's rendering.
+    void viewportRef.current.scrollHeight;
+
+    return next.start === target.start && next.end === target.end;
+  }
+
+  function fill(deadline?: IdleDeadline) {
+    isFillScheduled = false;
+
+    while (!fillStep()) {
+      if (
+        !deadline ||
+        deadline.didTimeout ||
+        deadline.timeRemaining() < VIEWPORT_FILL_RESERVE_MS
+      ) {
+        scheduleFill();
+
+        return;
+      }
+    }
+  }
+
+  function scheduleFill() {
+    if (!isFillScheduled) {
+      isFillScheduled = true;
+      requestIdle(fill);
+    }
+  }
+
+  const store = createStore<EmojiPickerStore>((set, get) => ({
     locale: initialLocale,
     columns: initialColumns,
     sticky: initialSticky,
@@ -148,26 +243,66 @@ export function createEmojiPickerStore(
         data.categories.length * categoryHeaderHeight +
         data.rows.length * rowHeight;
 
-      const overscan = VIEWPORT_OVERSCAN_ROWS * rowHeight;
-
       // Adjust the scroll position to account for previous category headers
       const rowsScrollY = viewportScrollY - previousCategoryHeadersHeight;
-      const viewportStartY = Math.min(
-        rowsScrollY - overscan,
-        totalHeight - viewportHeight,
-      );
-      const viewportEndY = rowsScrollY + viewportHeight + overscan;
+      const lastRowIndex = data.rows.length - 1;
 
-      const viewportStartRowIndex = Math.max(
-        0,
-        Math.floor(viewportStartY / rowHeight),
+      visibleRows = {
+        start: Math.max(
+          0,
+          Math.floor(
+            Math.min(rowsScrollY, totalHeight - viewportHeight) / rowHeight,
+          ),
+        ),
+        end: Math.min(
+          lastRowIndex,
+          Math.ceil((rowsScrollY + viewportHeight) / rowHeight),
+        ),
+      };
+
+      const required = rowsAround(
+        visibleRows,
+        VIEWPORT_OVERSCAN_ROWS,
+        lastRowIndex,
       );
-      const viewportEndRowIndex = Math.min(
-        data.rows.length - 1,
-        Math.ceil(viewportEndY / rowHeight),
+      const buffer = rowsAround(
+        visibleRows,
+        VIEWPORT_BUFFER_ROWS,
+        lastRowIndex,
       );
-      const viewportStartCategoryIndex =
-        data.rows[viewportStartRowIndex]?.categoryIndex;
+      const rendered = {
+        start: state.viewportStartRowIndex,
+        end: state.viewportEndRowIndex,
+      };
+      // A new search renders only the rows in view, and idle time renders
+      // the rest: its rows all change, so keeping them costs more than
+      // remounting them. Otherwise rendered rows near the viewport stay, and
+      // scrolling within them changes nothing.
+      let next = required;
+
+      if (
+        !partial &&
+        rendered.start <= required.start &&
+        rendered.end >= required.end
+      ) {
+        next = rendered;
+      } else if (
+        !isNewSearch &&
+        required.start <= rendered.end + 1 &&
+        required.end >= rendered.start - 1
+      ) {
+        next = {
+          start: Math.max(
+            buffer.start,
+            Math.min(rendered.start, required.start),
+          ),
+          end: Math.min(buffer.end, Math.max(rendered.end, required.end)),
+        };
+      }
+
+      const viewportStartCategoryIndex = data.rows[next.start]?.categoryIndex;
+
+      scheduleFill();
 
       if (viewportStartCategoryIndex === undefined && partial) {
         return set(partial);
@@ -176,8 +311,8 @@ export function createEmojiPickerStore(
       return set({
         ...partial,
         viewportStartCategoryIndex,
-        viewportStartRowIndex,
-        viewportEndRowIndex,
+        viewportStartRowIndex: next.start,
+        viewportEndRowIndex: next.end,
       });
     },
 
@@ -189,11 +324,17 @@ export function createEmojiPickerStore(
 
       // Reset active emoji when search changes
       if (hasSearchChanged) {
-        return state.updateViewportState({
-          data,
-          activeColumnIndex: 0,
-          activeRowIndex: 0,
-        });
+        isNewSearch = true;
+
+        try {
+          return state.updateViewportState({
+            data,
+            activeColumnIndex: 0,
+            activeRowIndex: 0,
+          });
+        } finally {
+          isNewSearch = false;
+        }
       }
 
       // Pointer interactions update the active emoji on their own
@@ -321,6 +462,8 @@ export function createEmojiPickerStore(
       get().updateViewportState();
     },
   }));
+
+  return store;
 }
 
 export const {
